@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import { SignJWT, jwtVerify } from 'jose';
 import { connectDB } from '@/lib/mongodb';
 import UserModel, { IUser } from '@/models/User';
@@ -17,10 +18,31 @@ export class AuthError extends Error {
   }
 }
 
+let warnedMissingJwtSecret = false;
+
 function getJwtSecret(): Uint8Array {
-  const secret =
-    process.env.JWT_SECRET ||
-    'yatrabus-dev-jwt-secret-key-change-in-production-2026';
+  const secret = process.env.JWT_SECRET?.trim();
+  if (process.env.NODE_ENV === 'production') {
+    if (!secret || secret.length < 32) {
+      throw new Error(
+        'JWT_SECRET environment variable must be set and at least 32 characters in production.'
+      );
+    }
+    return new TextEncoder().encode(secret);
+  }
+
+  if (!secret || secret.length < 32) {
+    if (!warnedMissingJwtSecret) {
+      console.warn(
+        '[auth-guard] JWT_SECRET is missing or shorter than 32 characters; using insecure development fallback.'
+      );
+      warnedMissingJwtSecret = true;
+    }
+    return new TextEncoder().encode(
+      secret || 'yatrabus-dev-jwt-secret-key-change-in-production-2026'
+    );
+  }
+
   return new TextEncoder().encode(secret);
 }
 
@@ -120,6 +142,17 @@ export async function requireAdmin(): Promise<IUser> {
   return user;
 }
 
+function isDuplicateKeyError(
+  error: unknown
+): error is { code: number; keyPattern?: Record<string, unknown> } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 11000
+  );
+}
+
 export function handleApiError(error: unknown): NextResponse {
   if (error instanceof AuthError) {
     return NextResponse.json(
@@ -128,8 +161,37 @@ export function handleApiError(error: unknown): NextResponse {
     );
   }
 
+  if (error instanceof mongoose.Error.ValidationError) {
+    const details = Object.values(error.errors)
+      .map((e) => e.message)
+      .filter(Boolean)
+      .join('; ');
+    return NextResponse.json(
+      { error: details || 'Invalid request data.' },
+      { status: 400 }
+    );
+  }
+
+  if (error instanceof mongoose.Error.CastError) {
+    return NextResponse.json(
+      { error: `Invalid ${error.path || 'identifier'} format.` },
+      { status: 400 }
+    );
+  }
+
+  if (isDuplicateKeyError(error)) {
+    const fields = error.keyPattern ? Object.keys(error.keyPattern) : [];
+    const fieldLabel = fields.length > 0 ? fields.join(', ') : 'value';
+    return NextResponse.json(
+      { error: `A record with this ${fieldLabel} already exists.` },
+      { status: 409 }
+    );
+  }
+
   console.error('API Error:', error);
   const message =
-    error instanceof Error ? error.message : 'Internal server error';
+    process.env.NODE_ENV !== 'production' && error instanceof Error
+      ? error.message
+      : 'Internal server error. Please try again later.';
   return NextResponse.json({ error: message }, { status: 500 });
 }

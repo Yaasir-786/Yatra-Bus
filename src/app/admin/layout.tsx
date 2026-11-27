@@ -53,7 +53,7 @@ export default function AdminLayout({
           <p className="mt-2 text-sm text-slate-600">
             {currentUser
               ? `You are currently signed in as ${currentUser.name} (${currentUser.role}). Sign in with an administrator account to manage users, schedules, and bookings.`
-              : 'You are currently logged out. Please sign in with an administrator account (e.g., admin@bus.com) to access the Admin Panel.'}
+              : 'You are currently logged out. Please sign in with an administrator account to access the Admin Panel.'}
           </p>
 
           <div className="mt-6 flex flex-col gap-2.5">

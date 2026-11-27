@@ -27,16 +27,26 @@ function extractBookPaths(text: string): string[] {
 }
 
 function formatAiError(error: Error | string): string {
-  const raw = (typeof error === 'string' ? error : error.message)?.trim();
+  let raw = (typeof error === 'string' ? error : error.message)?.trim();
   if (!raw) {
     return 'Could not reach AI Trip Assistant. Check GOOGLE_GENERATIVE_AI_API_KEY in .env.local.';
   }
   try {
     const parsed = JSON.parse(raw) as { error?: string; message?: string };
-    if (parsed.error) return parsed.error;
-    if (parsed.message) return parsed.message;
+    if (parsed.error) raw = parsed.error;
+    else if (parsed.message) raw = parsed.message;
   } catch {
-    // Not JSON; return raw message
+    // Not JSON; keep raw message
+  }
+  const lower = raw.toLowerCase();
+  if (lower.includes('401') || lower.includes('api key') || lower.includes('permission_denied')) {
+    return 'Invalid or unauthorized Google Gemini API key. Check GOOGLE_GENERATIVE_AI_API_KEY.';
+  }
+  if (lower.includes('404') || lower.includes('not found') || lower.includes('not supported')) {
+    return 'The configured Gemini model is unavailable. Set GEMINI_MODEL in .env.local to a supported model.';
+  }
+  if (lower.includes('429') || lower.includes('quota') || lower.includes('rate limit')) {
+    return 'Gemini API quota or rate limit exceeded. Please wait a moment and try again.';
   }
   return raw;
 }
@@ -153,8 +163,8 @@ export default function AiChatDrawer() {
   const displayError = localError ?? (error ? formatAiError(error) : null);
 
   const quickPrompts = [
-    'Find buses from Indore to Bhopal',
-    'Show sleeper buses and open window seats',
+    'Find buses between two cities',
+    'Show cheapest sleeper buses',
     'What are my current bookings?',
   ];
 

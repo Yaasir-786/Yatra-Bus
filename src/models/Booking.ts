@@ -50,7 +50,7 @@ const BookingSchema = new Schema<IBooking>(
     busNumber: { type: String, required: true, trim: true },
     origin: { type: String, required: true, trim: true },
     destination: { type: String, required: true, trim: true },
-    travelDate: { type: String, required: true, trim: true },
+    travelDate: { type: String, default: '', trim: true },
     departureTime: { type: String, required: true, trim: true },
     arrivalTime: { type: String, default: '' },
     passengers: { type: [PassengerSchema], required: true },

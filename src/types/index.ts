@@ -120,6 +120,8 @@ export interface AddBusScheduleInput {
   duration: string;
   fare: number;
   operatingDays?: DayOfWeek[];
+  startDate?: string;
+  daysAhead?: number;
   // Return trip fields
   createReturn?: boolean;
   returnDate?: string;

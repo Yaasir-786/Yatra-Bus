@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { HydratedDocument } from 'mongoose';
 import { connectDB } from '@/lib/mongodb';
 import { handleApiError, requireAdmin } from '@/lib/auth-guard';
+import { addDaysIST, getTodayIST, getWeekdayIST } from '@/lib/date-ist';
 import BusModel from '@/models/Bus';
-import ScheduleModel from '@/models/Schedule';
+import ScheduleModel, { ISchedule } from '@/models/Schedule';
 import { serializeBus, serializeSchedule } from '@/lib/serializers';
 import { BusType, DAYS_OF_WEEK, DayOfWeek } from '@/types';
 
@@ -31,6 +33,38 @@ function calculateTripDuration(
   return `${hours}h ${String(mins).padStart(2, '0')}m`;
 }
 
+async function insertSchedulesSkippingDuplicates(
+  docs: Record<string, unknown>[]
+): Promise<HydratedDocument<ISchedule>[]> {
+  if (docs.length === 0) return [];
+  try {
+    return (await ScheduleModel.insertMany(docs, {
+      ordered: false,
+    })) as HydratedDocument<ISchedule>[];
+  } catch (err: unknown) {
+    // Mongoose/MongoDB ordered:false throws BulkWriteError on duplicate keys (code 11000)
+    // while still inserting all non-duplicate docs.
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'insertedDocs' in err &&
+      Array.isArray((err as { insertedDocs?: unknown[] }).insertedDocs)
+    ) {
+      return (err as { insertedDocs: HydratedDocument<ISchedule>[] })
+        .insertedDocs;
+    }
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code?: unknown }).code === 11000
+    ) {
+      return [];
+    }
+    throw err;
+  }
+}
+
 export async function GET() {
   try {
     await requireAdmin();
@@ -38,7 +72,7 @@ export async function GET() {
 
     const [buses, schedules] = await Promise.all([
       BusModel.find().sort({ createdAt: -1 }).lean(),
-      ScheduleModel.find().sort({ createdAt: -1 }).lean(),
+      ScheduleModel.find().sort({ travelDate: 1, departureTime: 1 }).lean(),
     ]);
 
     return NextResponse.json({
@@ -61,12 +95,13 @@ export async function POST(request: NextRequest) {
       amenities?: string[];
       origin?: string;
       destination?: string;
-      travelDate?: string;
       departureTime?: string;
       arrivalTime?: string;
       duration?: string;
       fare?: number;
       operatingDays?: string[];
+      startDate?: string;
+      daysAhead?: number;
       createReturn?: boolean;
       returnDate?: string;
       returnDepartureTime?: string;
@@ -80,7 +115,6 @@ export async function POST(request: NextRequest) {
     const amenities = Array.isArray(body.amenities) ? body.amenities : [busType];
     const origin = body.origin?.trim() ?? '';
     const destination = body.destination?.trim() ?? '';
-    const travelDate = body.travelDate?.trim() ?? '';
     const departureTime = body.departureTime?.trim() ?? '';
     const arrivalTime = body.arrivalTime?.trim() ?? '';
     const duration =
@@ -96,6 +130,12 @@ export async function POST(request: NextRequest) {
     const operatingDays: DayOfWeek[] =
       parsedDays.length > 0 ? parsedDays : [...DAYS_OF_WEEK];
 
+    const startDate = body.startDate?.trim() || getTodayIST();
+    const rawDaysAhead = Number(body.daysAhead ?? 30);
+    const daysAhead = Number.isFinite(rawDaysAhead)
+      ? Math.min(Math.max(Math.trunc(rawDaysAhead), 1), 90)
+      : 30;
+
     if (
       !busName ||
       !busNumber ||
@@ -107,6 +147,20 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: 'Please complete all required bus and schedule fields.' },
+        { status: 400 }
+      );
+    }
+
+    if (origin.toLowerCase() === destination.toLowerCase()) {
+      return NextResponse.json(
+        { error: 'Origin and destination cities must be different.' },
+        { status: 400 }
+      );
+    }
+
+    if (!Number.isInteger(totalSeats) || totalSeats < 12 || totalSeats > 60) {
+      return NextResponse.json(
+        { error: 'Total seats must be between 12 and 60.' },
         { status: 400 }
       );
     }
@@ -124,54 +178,75 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const schedule = await ScheduleModel.create({
-      busId: bus._id,
-      busName: bus.busName,
-      busNumber: bus.busNumber,
-      busType: bus.busType,
-      totalSeats: bus.totalSeats,
-      origin,
-      destination,
-      travelDate,
-      departureTime,
-      arrivalTime,
-      duration,
-      fare,
-      bookedSeats: [],
-      operatingDays,
-    });
+    const daySet = new Set<DayOfWeek>(operatingDays);
+    const onwardDocs: Record<string, unknown>[] = [];
+    for (let i = 0; i < daysAhead; i++) {
+      const dateStr = addDaysIST(startDate, i);
+      const weekday = getWeekdayIST(dateStr);
+      if (weekday && daySet.has(weekday)) {
+        onwardDocs.push({
+          busId: bus._id,
+          busName: bus.busName,
+          busNumber: bus.busNumber,
+          busType: bus.busType,
+          totalSeats: bus.totalSeats,
+          origin,
+          destination,
+          travelDate: dateStr,
+          departureTime,
+          arrivalTime,
+          duration,
+          fare,
+          bookedSeats: [],
+          operatingDays,
+        });
+      }
+    }
 
-    let returnSchedule = null;
+    const insertedOnward = await insertSchedulesSkippingDuplicates(onwardDocs);
+
+    let insertedReturn: Awaited<ReturnType<typeof insertSchedulesSkippingDuplicates>> = [];
     if (body.createReturn) {
-      const rDate = body.returnDate?.trim() ?? '';
+      const rStart = body.returnDate?.trim() || startDate;
       const rDep = body.returnDepartureTime?.trim() || departureTime;
       const rArr = body.returnArrivalTime?.trim() || arrivalTime;
       const rDuration = calculateTripDuration(rDep, rArr);
 
-      returnSchedule = await ScheduleModel.create({
-        busId: bus._id,
-        busName: bus.busName,
-        busNumber: bus.busNumber,
-        busType: bus.busType,
-        totalSeats: bus.totalSeats,
-        origin: destination,
-        destination: origin,
-        travelDate: rDate,
-        departureTime: rDep,
-        arrivalTime: rArr,
-        duration: rDuration,
-        fare,
-        bookedSeats: [],
-        operatingDays,
-      });
+      const returnDocs: Record<string, unknown>[] = [];
+      for (let i = 0; i < daysAhead; i++) {
+        const dateStr = addDaysIST(rStart, i);
+        const weekday = getWeekdayIST(dateStr);
+        if (weekday && daySet.has(weekday)) {
+          returnDocs.push({
+            busId: bus._id,
+            busName: bus.busName,
+            busNumber: bus.busNumber,
+            busType: bus.busType,
+            totalSeats: bus.totalSeats,
+            origin: destination,
+            destination: origin,
+            travelDate: dateStr,
+            departureTime: rDep,
+            arrivalTime: rArr,
+            duration: rDuration,
+            fare,
+            bookedSeats: [],
+            operatingDays,
+          });
+        }
+      }
+
+      insertedReturn = await insertSchedulesSkippingDuplicates(returnDocs);
     }
 
     return NextResponse.json(
       {
         bus: serializeBus(bus),
-        schedule: serializeSchedule(schedule),
-        returnSchedule: returnSchedule ? serializeSchedule(returnSchedule) : null,
-        createdReturn: !!returnSchedule,
+        schedule: insertedOnward[0] ? serializeSchedule(insertedOnward[0]) : null,
+        schedulesCount: insertedOnward.length,
+        returnSchedulesCount: insertedReturn.length,
+        totalCreated: insertedOnward.length + insertedReturn.length,
+        createdReturn: insertedReturn.length > 0,
       },
       { status: 201 }
     );

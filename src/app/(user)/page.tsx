@@ -7,15 +7,24 @@ import { Schedule } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
+async function fetchInitialSchedules(): Promise<Schedule[]> {
+  await connectDB();
+  const docs = await ScheduleModel.find()
+    .sort({ travelDate: 1, departureTime: 1 })
+    .lean();
+  return docs.map(serializeSchedule);
+}
+
 export default async function HomePage() {
   let initialSchedules: Schedule[] = [];
 
   try {
-    await connectDB();
-    const docs = await ScheduleModel.find()
-      .sort({ travelDate: 1, departureTime: 1 })
-      .lean();
-    initialSchedules = docs.map(serializeSchedule);
+    initialSchedules = await Promise.race([
+      fetchInitialSchedules(),
+      new Promise<Schedule[]>((resolve) => {
+        setTimeout(() => resolve([]), 3000);
+      }),
+    ]);
   } catch (error) {
     console.error('HomePage initial schedules fetch error:', error);
   }

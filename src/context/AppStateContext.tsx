@@ -348,7 +348,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(input),
       });
       const { ok, status, data } = await parseApiResponse<{
-        schedule: Schedule;
+        schedule?: Schedule | null;
+        totalCreated?: number;
       }>(res);
 
       if (status === 403 && data.code === 'USER_BLOCKED') {
@@ -356,7 +357,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: 'Account blocked.' };
       }
 
-      if (!ok || !data.schedule) {
+      if (!ok) {
         return {
           success: false,
           error: data.error ?? 'Could not save bus schedule.',
@@ -364,7 +365,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
 
       await refreshSchedules();
-      return { success: true, schedule: data.schedule };
+      return { success: true, schedule: data.schedule ?? undefined };
     } catch {
       return { success: false, error: 'Network error while saving schedule.' };
     }

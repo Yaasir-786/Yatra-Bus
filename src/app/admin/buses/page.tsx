@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import CityAutocomplete from '@/components/CityAutocomplete';
 import { parseApiResponse } from '@/lib/client-api';
+import { addDaysIST, getTodayIST, getWeekdayIST } from '@/lib/date-ist';
 import { useAppState } from '@/context/AppStateContext';
 import { BusType, DAYS_OF_WEEK, DayOfWeek, Schedule } from '@/types';
 
@@ -58,39 +59,61 @@ export default function AdminBusesPage() {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Onward trip fields
+  // Onward trip fields (no pre-filled demo values)
   const [busName, setBusName] = useState('');
   const [busNumber, setBusNumber] = useState('');
   const [busType, setBusType] = useState<BusType>('AC');
   const [totalSeats, setTotalSeats] = useState('32');
-  const [amenitiesText, setAmenitiesText] = useState(
-    'AC, Wi-Fi, Charging Point, Water Bottle'
-  );
-  const [origin, setOrigin] = useState('Indore');
-  const [destination, setDestination] = useState('Pune');
-  const [departureTime, setDepartureTime] = useState('20:00');
-  const [arrivalTime, setArrivalTime] = useState('06:00');
-  const [fare, setFare] = useState('950');
+  const [amenitiesText, setAmenitiesText] = useState('');
+  const [origin, setOrigin] = useState('');
+  const [destination, setDestination] = useState('');
+  const [departureTime, setDepartureTime] = useState('');
+  const [arrivalTime, setArrivalTime] = useState('');
+  const [fare, setFare] = useState('');
   const [operatingDays, setOperatingDays] = useState<DayOfWeek[]>([
     ...DAYS_OF_WEEK,
   ]);
+  const [startDate, setStartDate] = useState(() => getTodayIST());
+  const [daysAhead, setDaysAhead] = useState('30');
 
   // Return trip fields
   const [createReturn, setCreateReturn] = useState(true);
-  const [returnDepartureTime, setReturnDepartureTime] = useState('20:00');
-  const [returnArrivalTime, setReturnArrivalTime] = useState('06:00');
+  const [returnDepartureTime, setReturnDepartureTime] = useState('');
+  const [returnArrivalTime, setReturnArrivalTime] = useState('');
 
   const [formError, setFormError] = useState<string | null>(null);
 
-  const autoDuration = useMemo(
-    () => calculateTripDuration(departureTime, arrivalTime),
-    [departureTime, arrivalTime]
-  );
+  const autoDuration = useMemo(() => {
+    if (!departureTime || !arrivalTime) return '--';
+    return calculateTripDuration(departureTime, arrivalTime);
+  }, [departureTime, arrivalTime]);
 
-  const returnAutoDuration = useMemo(
-    () => calculateTripDuration(returnDepartureTime, returnArrivalTime),
-    [returnDepartureTime, returnArrivalTime]
-  );
+  const returnAutoDuration = useMemo(() => {
+    const dep = returnDepartureTime || departureTime;
+    const arr = returnArrivalTime || arrivalTime;
+    if (!dep || !arr) return '--';
+    return calculateTripDuration(dep, arr);
+  }, [returnDepartureTime, returnArrivalTime, departureTime, arrivalTime]);
+
+  const plannedTripStats = useMemo(() => {
+    const parsedDays = Number.parseInt(daysAhead, 10);
+    const countDays = Number.isFinite(parsedDays)
+      ? Math.min(Math.max(parsedDays, 1), 90)
+      : 0;
+    if (!startDate || countDays <= 0 || operatingDays.length === 0) {
+      return { onward: 0, total: 0 };
+    }
+    const daySet = new Set(operatingDays);
+    let onward = 0;
+    for (let i = 0; i < countDays; i++) {
+      const weekday = getWeekdayIST(addDaysIST(startDate, i));
+      if (weekday && daySet.has(weekday)) onward++;
+    }
+    return {
+      onward,
+      total: createReturn ? onward * 2 : onward,
+    };
+  }, [startDate, daysAhead, operatingDays, createReturn]);
 
   const toggleDay = (day: DayOfWeek) => {
     setOperatingDays((prev) =>
@@ -133,12 +156,16 @@ export default function AdminBusesPage() {
       setFormError('Please provide both bus name and bus number.');
       return;
     }
-    if (origin === destination) {
+    if (!origin.trim() || !destination.trim()) {
+      setFormError('Please select both origin and destination cities.');
+      return;
+    }
+    if (origin.trim().toLowerCase() === destination.trim().toLowerCase()) {
       setFormError('Origin and destination cities must be different.');
       return;
     }
-    if (!origin.trim() || !destination.trim()) {
-      setFormError('Please select both origin and destination cities.');
+    if (!departureTime || !arrivalTime) {
+      setFormError('Please select both departure and arrival times.');
       return;
     }
     if (operatingDays.length === 0) {
@@ -148,13 +175,22 @@ export default function AdminBusesPage() {
 
     const parsedSeats = Number.parseInt(totalSeats, 10);
     const parsedFare = Number.parseInt(fare, 10);
+    const parsedDaysAhead = Number.parseInt(daysAhead, 10);
 
-    if (Number.isNaN(parsedSeats) || parsedSeats < 12 || parsedSeats > 48) {
-      setFormError('Total seats must be between 12 and 48.');
+    if (Number.isNaN(parsedSeats) || parsedSeats < 12 || parsedSeats > 60) {
+      setFormError('Total seats must be between 12 and 60.');
       return;
     }
     if (Number.isNaN(parsedFare) || parsedFare < 100) {
       setFormError('Fare must be at least ₹100.');
+      return;
+    }
+    if (
+      Number.isNaN(parsedDaysAhead) ||
+      parsedDaysAhead < 1 ||
+      parsedDaysAhead > 90
+    ) {
+      setFormError('Number of days must be between 1 and 90.');
       return;
     }
 
@@ -174,12 +210,18 @@ export default function AdminBusesPage() {
       destination,
       departureTime,
       arrivalTime,
-      duration: autoDuration,
+      duration: autoDuration === '--' ? '4h 00m' : autoDuration,
       fare: parsedFare,
       operatingDays,
+      startDate,
+      daysAhead: parsedDaysAhead,
       createReturn,
-      returnDepartureTime: createReturn ? returnDepartureTime : undefined,
-      returnArrivalTime: createReturn ? returnArrivalTime : undefined,
+      returnDepartureTime: createReturn
+        ? returnDepartureTime || departureTime
+        : undefined,
+      returnArrivalTime: createReturn
+        ? returnArrivalTime || arrivalTime
+        : undefined,
     });
     setSaving(false);
 
@@ -190,6 +232,13 @@ export default function AdminBusesPage() {
 
     setBusName('');
     setBusNumber('');
+    setOrigin('');
+    setDestination('');
+    setDepartureTime('');
+    setArrivalTime('');
+    setFare('');
+    setReturnDepartureTime('');
+    setReturnArrivalTime('');
     setIsModalOpen(false);
     await fetchAdminBuses();
   };
@@ -215,8 +264,8 @@ export default function AdminBusesPage() {
             Buses &amp; Schedules
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Monitor seat occupancy in MongoDB, delete schedules, or launch new
-            routes
+            Monitor per-date seat occupancy in MongoDB, delete schedules, or
+            launch new routes
           </p>
         </div>
 
@@ -415,7 +464,7 @@ export default function AdminBusesPage() {
                     type="text"
                     value={busName}
                     onChange={(e) => setBusName(e.target.value)}
-                    placeholder="e.g. Avantika Express"
+                    placeholder="Enter operator or bus name"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
                   />
                 </div>
@@ -427,7 +476,7 @@ export default function AdminBusesPage() {
                     type="text"
                     value={busNumber}
                     onChange={(e) => setBusNumber(e.target.value)}
-                    placeholder="e.g. MP-09-XY-1234"
+                    placeholder="e.g. MH-01-AB-1234"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm uppercase focus:border-indigo-500 focus:bg-white focus:outline-none"
                   />
                 </div>
@@ -450,14 +499,15 @@ export default function AdminBusesPage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-600">
-                    Total Seats
+                    Total Seats (12–60)
                   </label>
                   <input
                     type="number"
                     min={12}
-                    max={48}
+                    max={60}
                     value={totalSeats}
                     onChange={(e) => setTotalSeats(e.target.value)}
+                    placeholder="32"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
                   />
                 </div>
@@ -470,6 +520,7 @@ export default function AdminBusesPage() {
                     min={100}
                     value={fare}
                     onChange={(e) => setFare(e.target.value)}
+                    placeholder="e.g. 850"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
                   />
                 </div>
@@ -483,15 +534,16 @@ export default function AdminBusesPage() {
                   type="text"
                   value={amenitiesText}
                   onChange={(e) => setAmenitiesText(e.target.value)}
+                  placeholder="AC, Wi-Fi, Charging Point, Water Bottle"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
                 />
               </div>
 
-              {/* Operating Days Selector */}
+              {/* Operating Days & Date Range */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
                 <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Operating Days
+                    Operating Days &amp; Schedule Window
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -536,6 +588,39 @@ export default function AdminBusesPage() {
                     );
                   })}
                 </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">
+                      Start date
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">
+                      Number of days (1–90)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={daysAhead}
+                      onChange={(e) => setDaysAhead(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <div className="flex h-[38px] w-full items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 text-xs font-bold text-indigo-700">
+                      {plannedTripStats.total} trip
+                      {plannedTripStats.total === 1 ? '' : 's'} will be created
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Onward Route */}
@@ -549,7 +634,7 @@ export default function AdminBusesPage() {
                     label="Origin"
                     value={origin}
                     onChange={setOrigin}
-                    placeholder="Origin city..."
+                    placeholder="Select origin city..."
                     iconColor="text-indigo-600"
                   />
                   <CityAutocomplete
@@ -557,7 +642,7 @@ export default function AdminBusesPage() {
                     label="Destination"
                     value={destination}
                     onChange={setDestination}
-                    placeholder="Destination city..."
+                    placeholder="Select destination city..."
                     iconColor="text-rose-500"
                   />
                 </div>
@@ -669,9 +754,9 @@ export default function AdminBusesPage() {
                   {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {saving
                     ? 'Saving...'
-                    : createReturn
-                    ? 'Save Both Schedules'
-                    : 'Save Schedule'}
+                    : `Create ${plannedTripStats.total} Schedule${
+                        plannedTripStats.total === 1 ? '' : 's'
+                      }`}
                 </button>
               </div>
             </form>

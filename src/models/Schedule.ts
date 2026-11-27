@@ -49,6 +49,10 @@ const ScheduleSchema = new Schema<ISchedule>(
 );
 
 ScheduleSchema.index({ origin: 1, destination: 1, travelDate: 1 });
+ScheduleSchema.index(
+  { busId: 1, origin: 1, destination: 1, travelDate: 1, departureTime: 1 },
+  { unique: true }
+);
 
 const ScheduleModel: Model<ISchedule> =
   mongoose.models.Schedule ||

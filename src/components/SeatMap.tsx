@@ -3,6 +3,7 @@
 import React from 'react';
 import { Disc } from 'lucide-react';
 import { BusType } from '@/types';
+import { SEAT_COLUMNS } from '@/lib/seats';
 
 interface SeatMapProps {
   totalSeats: number;
@@ -11,8 +12,6 @@ interface SeatMapProps {
   busType?: BusType;
   onToggleSeat: (seatNumber: string) => void;
 }
-
-const COLUMNS = ['A', 'B', 'C', 'D'] as const;
 
 export default function SeatMap({
   totalSeats,
@@ -27,7 +26,7 @@ export default function SeatMap({
 
   const rows = Array.from({ length: rowCount }, (_, rowIdx) => {
     const rowNum = rowIdx + 1;
-    return COLUMNS.map((col, colIdx) => {
+    return SEAT_COLUMNS.map((col, colIdx) => {
       const seatIndex = rowIdx * 4 + colIdx;
       if (seatIndex >= totalSeats) return null;
       return `${rowNum}${col}`;

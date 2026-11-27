@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { handleApiError, requireAdmin } from '@/lib/auth-guard';
+import { getNowIST } from '@/lib/date-ist';
 import UserModel from '@/models/User';
 import ScheduleModel from '@/models/Schedule';
 import BookingModel from '@/models/Booking';
@@ -11,6 +12,8 @@ export async function GET() {
     await requireAdmin();
     await connectDB();
 
+    const now = getNowIST();
+
     const [
       totalUsers,
       blockedUsers,
@@ -20,7 +23,14 @@ export async function GET() {
     ] = await Promise.all([
       UserModel.countDocuments(),
       UserModel.countDocuments({ status: 'blocked' }),
-      ScheduleModel.countDocuments(),
+      ScheduleModel.countDocuments({
+        $or: [
+          { travelDate: '' },
+          { travelDate: { $exists: false } },
+          { travelDate: { $gt: now.date } },
+          { travelDate: now.date, departureTime: { $gt: now.time } },
+        ],
+      }),
       BookingModel.aggregate<{ total: number }>([
         { $match: { status: 'confirmed' } },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } },

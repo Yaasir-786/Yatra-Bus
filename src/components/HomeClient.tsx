@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeftRight,
   ArrowRight,
+  Bus,
   Calendar,
   Search,
   ShieldCheck,
@@ -14,19 +15,9 @@ import {
   Zap,
 } from 'lucide-react';
 import CityAutocomplete from '@/components/CityAutocomplete';
+import { getTodayIST } from '@/lib/date-ist';
 import { useAppState } from '@/context/AppStateContext';
 import { Schedule } from '@/types';
-
-const FEATURED_CORRIDORS = [
-  { origin: 'Indore', destination: 'Bhopal', duration: '3h 45m', startingFare: 320 },
-  { origin: 'Indore', destination: 'Mumbai', duration: '10h 30m', startingFare: 1250 },
-  { origin: 'Mumbai', destination: 'Pune', duration: '3h 30m', startingFare: 550 },
-  { origin: 'Pune', destination: 'Mumbai', duration: '4h 00m', startingFare: 680 },
-  { origin: 'Indore', destination: 'Ahmedabad', duration: '8h 45m', startingFare: 920 },
-  { origin: 'Bhopal', destination: 'Indore', duration: '3h 45m', startingFare: 490 },
-  { origin: 'Ahmedabad', destination: 'Mumbai', duration: '8h 45m', startingFare: 1150 },
-  { origin: 'Delhi', destination: 'Jaipur', duration: '5h 30m', startingFare: 650 },
-];
 
 export default function HomeClient({
   initialSchedules,
@@ -35,14 +26,18 @@ export default function HomeClient({
 }) {
   const router = useRouter();
   const { schedules: contextSchedules, schedulesLoading } = useAppState();
-  const [origin, setOrigin] = useState('Indore');
-  const [destination, setDestination] = useState('Bhopal');
-  const [travelDate, setTravelDate] = useState('2026-11-27');
+  const [origin, setOrigin] = useState('');
+  const [destination, setDestination] = useState('');
+  const [travelDate, setTravelDate] = useState('');
+
+  useEffect(() => {
+    setTravelDate(getTodayIST());
+  }, []);
 
   const activeSchedules =
     contextSchedules.length > 0 ? contextSchedules : initialSchedules;
 
-  const { popularRoutes, isFallbackRoutes } = useMemo(() => {
+  const popularRoutes = useMemo(() => {
     const routeMap = new Map<
       string,
       { origin: string; destination: string; startingFare: number; duration: string }
@@ -59,11 +54,7 @@ export default function HomeClient({
         });
       }
     }
-    const live = Array.from(routeMap.values()).slice(0, 8);
-    if (live.length > 0) {
-      return { popularRoutes: live, isFallbackRoutes: false };
-    }
-    return { popularRoutes: FEATURED_CORRIDORS, isFallbackRoutes: true };
+    return Array.from(routeMap.values()).slice(0, 8);
   }, [activeSchedules]);
 
   const uniqueBusCount = useMemo(
@@ -184,10 +175,12 @@ export default function HomeClient({
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
               <span>
-                Tip: Try <strong className="text-slate-700">Indore → Bhopal</strong> or{' '}
-                <strong className="text-slate-700">Indore → Mumbai</strong>, or{' '}
-                <Link href="/buses" className="font-semibold text-indigo-600 hover:underline">
-                  browse all schedules
+                Search any Indian city above or{' '}
+                <Link
+                  href="/buses"
+                  className="font-semibold text-indigo-600 hover:underline"
+                >
+                  browse all available schedules
                 </Link>
                 .
               </span>
@@ -204,7 +197,7 @@ export default function HomeClient({
         </div>
       </section>
 
-      {/* Popular Routes — loads immediately on first render without requiring login */}
+      {/* Popular Routes */}
       <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-end justify-between gap-4">
           <div>
@@ -212,9 +205,8 @@ export default function HomeClient({
               Popular Bus Routes
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              {isFallbackRoutes
-                ? 'Featured intercity corridors — click any route to check live availability'
-                : 'Live corridors loaded from MongoDB with AC, Non-AC, and Sleeper options'}
+              Live corridors loaded from MongoDB with AC, Non-AC, and Sleeper
+              options
             </p>
           </div>
           <Link
@@ -225,37 +217,50 @@ export default function HomeClient({
           </Link>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {popularRoutes.map((route) => (
-            <Link
-              key={`${route.origin}-${route.destination}`}
-              href={`/buses?origin=${encodeURIComponent(
-                route.origin
-              )}&destination=${encodeURIComponent(route.destination)}`}
-              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
-            >
-              <div className="flex items-center justify-between">
-                <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
-                  {route.duration}
-                </span>
-                <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-indigo-600" />
-              </div>
+        {popularRoutes.length === 0 ? (
+          <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+            <Bus className="mx-auto h-9 w-9 text-slate-300" />
+            <h3 className="mt-3 text-base font-bold text-slate-900">
+              No routes available yet
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Schedules created by an administrator will appear here
+              automatically.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {popularRoutes.map((route) => (
+              <Link
+                key={`${route.origin}-${route.destination}`}
+                href={`/buses?origin=${encodeURIComponent(
+                  route.origin
+                )}&destination=${encodeURIComponent(route.destination)}`}
+                className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                    {route.duration}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-indigo-600" />
+                </div>
 
-              <div className="mt-4 flex items-center gap-2 text-base font-bold text-slate-900">
-                <span>{route.origin}</span>
-                <span className="text-slate-400">→</span>
-                <span>{route.destination}</span>
-              </div>
+                <div className="mt-4 flex items-center gap-2 text-base font-bold text-slate-900">
+                  <span>{route.origin}</span>
+                  <span className="text-slate-400">→</span>
+                  <span>{route.destination}</span>
+                </div>
 
-              <div className="mt-3 flex items-baseline justify-between border-t border-slate-100 pt-3">
-                <span className="text-xs text-slate-500">Starting from</span>
-                <span className="text-lg font-extrabold text-indigo-600">
-                  ₹{route.startingFare}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
+                <div className="mt-3 flex items-baseline justify-between border-t border-slate-100 pt-3">
+                  <span className="text-xs text-slate-500">Starting from</span>
+                  <span className="text-lg font-extrabold text-indigo-600">
+                    ₹{route.startingFare}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Feature Highlights + AI Banner */}

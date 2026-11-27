@@ -3,21 +3,10 @@ import { generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { connectDB } from '@/lib/mongodb';
 import { handleApiError, requireAdmin } from '@/lib/auth-guard';
+import { getGeminiModelName, mapGeminiError } from '@/lib/ai-error';
 import ScheduleModel from '@/models/Schedule';
 import BookingModel from '@/models/Booking';
 import UserModel from '@/models/User';
-
-function getErrorStatus(error: unknown): number {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'statusCode' in error &&
-    typeof (error as { statusCode?: unknown }).statusCode === 'number'
-  ) {
-    return (error as { statusCode: number }).statusCode;
-  }
-  return 500;
-}
 
 export async function POST() {
   try {
@@ -103,7 +92,7 @@ export async function POST() {
 
     try {
       const { text } = await generateText({
-        model: google('gemini-2.5-flash'),
+        model: google(getGeminiModelName()),
         prompt: `You are an operations analyst for YatraBus. Given the live MongoDB metrics below, provide a concise, actionable 4-bullet executive summary covering:
 1. Top performing / highest occupancy routes and capacity recommendations
 2. Revenue & cancellation rate observations
@@ -121,18 +110,13 @@ ${JSON.stringify(summarySnapshot, null, 2)}`,
         metrics: summarySnapshot,
       });
     } catch (aiError) {
-      console.error('AI Admin Insights error:', aiError);
-      const message =
-        aiError instanceof Error
-          ? aiError.message
-          : 'Failed to generate AI operational insights.';
-      const status = getErrorStatus(aiError);
+      const mapped = mapGeminiError(aiError);
       return NextResponse.json(
         {
-          error: message,
+          error: mapped.message,
           metrics: summarySnapshot,
         },
-        { status }
+        { status: mapped.status }
       );
     }
   } catch (error) {

@@ -1,31 +1,24 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
-import Link from "next/link";
+import React, { useState } from 'react';
+import Link from 'next/link';
 import {
   AlertCircle,
   Bus,
-  CheckCircle2,
-  Database,
   Eye,
   EyeOff,
   Loader2,
   Lock,
   Mail,
-  Shield,
-  UserCheck,
-  UserX,
-} from "lucide-react";
-import { useAppState } from "@/context/AppStateContext";
+} from 'lucide-react';
+import { useAppState } from '@/context/AppStateContext';
 
 export default function LoginPage() {
-  const { loginUser, refreshSchedules } = useAppState();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const { loginUser } = useAppState();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-  const [seedMessage, setSeedMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -33,7 +26,7 @@ export default function LoginPage() {
     setError(null);
 
     if (!email.trim() || !password) {
-      setError("Please enter both your email address and password.");
+      setError('Please enter both your email address and password.');
       return;
     }
 
@@ -41,34 +34,8 @@ export default function LoginPage() {
     const result = await loginUser(email, password);
     setSubmitting(false);
 
-    if (!result.success && result.redirectTo !== "/blocked") {
-      setError(result.error ?? "Invalid email or password.");
-    }
-  };
-
-  const fillCredentials = (demoEmail: string, demoPassword: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setError(null);
-  };
-
-  const handleSeedDatabase = async () => {
-    setSeeding(true);
-    setSeedMessage(null);
-    setError(null);
-    try {
-      const res = await fetch("/api/seed", { method: "POST" });
-      const data = (await res.json()) as { message?: string; error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Failed to seed database.");
-      } else {
-        setSeedMessage(data.message ?? "Database seeded successfully.");
-        await refreshSchedules();
-      }
-    } catch {
-      setError("Could not connect to /api/seed.");
-    } finally {
-      setSeeding(false);
+    if (!result.success && result.redirectTo !== '/blocked') {
+      setError(result.error ?? 'Invalid email or password.');
     }
   };
 
@@ -94,18 +61,12 @@ export default function LoginPage() {
           </div>
         )}
 
-        {seedMessage && (
-          <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs font-medium text-emerald-700">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{seedMessage}</span>
-          </div>
-        )}
-
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
             <label
               htmlFor="login-email"
-              className="mb-1.5 block text-xs font-semibold text-slate-700">
+              className="mb-1.5 block text-xs font-semibold text-slate-700"
+            >
               Email Address
             </label>
             <div className="relative">
@@ -124,14 +85,15 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="login-password"
-              className="mb-1.5 block text-xs font-semibold text-slate-700">
+              className="mb-1.5 block text-xs font-semibold text-slate-700"
+            >
               Password
             </label>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 id="login-password"
-                type={showPassword ? "text" : "password"}
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
@@ -141,7 +103,8 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                aria-label={showPassword ? "Hide password" : "Show password"}>
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
                 {showPassword ? (
                   <EyeOff className="h-4 w-4" />
                 ) : (
@@ -154,17 +117,19 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60">
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60"
+          >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {submitting ? "Signing In..." : "Sign In"}
+            {submitting ? 'Signing In...' : 'Sign In'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-600">
-          Don&apos;t have an account?{" "}
+          Don&apos;t have an account?{' '}
           <Link
             href="/register"
-            className="font-semibold text-indigo-600 hover:text-indigo-700">
+            className="font-semibold text-indigo-600 hover:text-indigo-700"
+          >
             Create an account
           </Link>
         </p>

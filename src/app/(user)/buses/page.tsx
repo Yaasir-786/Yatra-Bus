@@ -32,7 +32,7 @@ function BusesContent() {
   );
   const [dateFilter, setDateFilter] = useState(searchParams.get('date') ?? '');
   const [selectedTypes, setSelectedTypes] = useState<BusType[]>([]);
-  const [maxFare, setMaxFare] = useState<number>(1500);
+  const [maxFare, setMaxFare] = useState<number | null>(null);
   const [departureWindow, setDepartureWindow] =
     useState<DepartureWindow>('all');
 
@@ -40,6 +40,13 @@ function BusesContent() {
   const [buses, setBuses] = useState<Bus[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const highestFare = useMemo(() => {
+    if (schedules.length === 0) return 2000;
+    return Math.max(...schedules.map((s) => s.fare), 500);
+  }, [schedules]);
+
+  const effectiveMaxFare = maxFare ?? highestFare;
 
   const fetchSchedules = useCallback(async () => {
     setLoading(true);
@@ -49,7 +56,6 @@ function BusesContent() {
       if (originFilter) params.set('origin', originFilter);
       if (destinationFilter) params.set('destination', destinationFilter);
       if (dateFilter) params.set('travelDate', dateFilter);
-      if (maxFare < 1500) params.set('maxFare', String(maxFare));
 
       const res = await fetch(`/api/schedules?${params.toString()}`, {
         cache: 'no-store',
@@ -71,7 +77,7 @@ function BusesContent() {
     } finally {
       setLoading(false);
     }
-  }, [originFilter, destinationFilter, dateFilter, maxFare]);
+  }, [originFilter, destinationFilter, dateFilter]);
 
   useEffect(() => {
     void fetchSchedules();
@@ -90,7 +96,7 @@ function BusesContent() {
     setDestinationFilter('');
     setDateFilter('');
     setSelectedTypes([]);
-    setMaxFare(1500);
+    setMaxFare(null);
     setDepartureWindow('all');
   };
 
@@ -99,7 +105,7 @@ function BusesContent() {
       if (selectedTypes.length > 0 && !selectedTypes.includes(schedule.busType)) {
         return false;
       }
-      if (schedule.fare > maxFare) {
+      if (schedule.fare > effectiveMaxFare) {
         return false;
       }
       if (departureWindow !== 'all') {
@@ -116,7 +122,7 @@ function BusesContent() {
       }
       return true;
     });
-  }, [schedules, selectedTypes, maxFare, departureWindow]);
+  }, [schedules, selectedTypes, effectiveMaxFare, departureWindow]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -223,21 +229,21 @@ function BusesContent() {
                   Max Fare
                 </h3>
                 <span className="text-sm font-bold text-indigo-600">
-                  ₹{maxFare}
+                  ₹{effectiveMaxFare}
                 </span>
               </div>
               <input
                 type="range"
-                min={300}
-                max={1500}
+                min={100}
+                max={highestFare}
                 step={50}
-                value={maxFare}
+                value={effectiveMaxFare}
                 onChange={(e) => setMaxFare(Number(e.target.value))}
                 className="w-full accent-indigo-600"
               />
               <div className="mt-1 flex justify-between text-[11px] text-slate-400">
-                <span>₹300</span>
-                <span>₹1500</span>
+                <span>₹100</span>
+                <span>₹{highestFare}</span>
               </div>
             </div>
 

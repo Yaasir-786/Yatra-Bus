@@ -10,25 +10,12 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
-import { getOptionalUser } from "@/lib/auth-guard";
+import { getOptionalUser, handleApiError } from "@/lib/auth-guard";
+import { getGeminiModelName, mapGeminiError } from "@/lib/ai-error";
+import { buildAllSeatLabels } from "@/lib/seats";
+import { buildScheduleQuery } from "@/lib/schedule-query";
 import ScheduleModel from "@/models/Schedule";
 import BookingModel from "@/models/Booking";
-
-const COLUMNS = ["A", "B", "C", "D"] as const;
-
-function buildAllSeatLabels(totalSeats: number): string[] {
-  const labels: string[] = [];
-  const rows = Math.ceil(totalSeats / 4);
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 0; c < 4; c++) {
-      const idx = (r - 1) * 4 + c;
-      if (idx < totalSeats) {
-        labels.push(`${r}${COLUMNS[c]}`);
-      }
-    }
-  }
-  return labels;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,7 +61,7 @@ export async function POST(request: NextRequest) {
     }, 25000);
 
     const result = streamText({
-      model: google('gemini-2.5-flash'),
+      model: google(getGeminiModelName()),
       abortSignal: controller.signal,
       system: `You are the YatraBus AI Trip Assistant for an Indian intercity bus booking platform.
 Always use your tools to inspect live MongoDB data before answering questions about buses, schedules, fares, seat availability, or user bookings.
@@ -108,22 +95,13 @@ Be concise, friendly, and accurate.`,
             busType,
             maxFare,
           }) => {
-            const query: Record<string, unknown> = {};
-            if (origin) {
-              query.origin = new RegExp(`^${origin.trim()}$`, "i");
-            }
-            if (destination) {
-              query.destination = new RegExp(`^${destination.trim()}$`, "i");
-            }
-            if (travelDate) {
-              query.travelDate = travelDate.trim();
-            }
-            if (busType) {
-              query.busType = busType;
-            }
-            if (typeof maxFare === "number" && maxFare > 0) {
-              query.fare = { $lte: maxFare };
-            }
+            const query = buildScheduleQuery({
+              origin,
+              destination,
+              travelDate,
+              busType,
+              maxFare,
+            });
 
             const docs = await ScheduleModel.find(query)
               .sort({ fare: 1, travelDate: 1 })
@@ -233,24 +211,19 @@ Be concise, friendly, and accurate.`,
 
     return result.toUIMessageStreamResponse({
       onError: (err) => {
-        console.error('AI Chat stream error:', err);
-        if (err instanceof Error && err.message) {
-          return err.message;
-        }
-        return 'AI assistant encountered an error while generating a response.';
+        return mapGeminiError(err).message;
       },
     });
   } catch (error) {
-    console.error("AI Chat error:", error);
-    const message =
-      error instanceof Error ? error.message : "AI assistant error";
-    const status =
+    if (
       typeof error === 'object' &&
       error !== null &&
-      'statusCode' in error &&
-      typeof (error as { statusCode?: unknown }).statusCode === 'number'
-        ? (error as { statusCode: number }).statusCode
-        : 500;
-    return NextResponse.json({ error: message }, { status });
+      'name' in error &&
+      String((error as { name?: unknown }).name).includes('Mongo')
+    ) {
+      return handleApiError(error);
+    }
+    const mapped = mapGeminiError(error);
+    return NextResponse.json({ error: mapped.message }, { status: mapped.status });
   }
 }
