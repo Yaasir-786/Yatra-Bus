@@ -41,6 +41,11 @@ export async function POST(request: NextRequest) {
       arrivalTime?: string;
       duration?: string;
       fare?: number;
+      // Return trip
+      createReturn?: boolean;
+      returnDate?: string;
+      returnDepartureTime?: string;
+      returnArrivalTime?: string;
     };
 
     const busName = body.busName?.trim() ?? '';
@@ -74,6 +79,7 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
+    // Upsert bus
     let bus = await BusModel.findOne({ busNumber });
     if (!bus) {
       bus = await BusModel.create({
@@ -85,6 +91,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Create onward schedule
     const schedule = await ScheduleModel.create({
       busId: bus._id,
       busName: bus.busName,
@@ -101,10 +108,36 @@ export async function POST(request: NextRequest) {
       bookedSeats: [],
     });
 
+    // Optionally create return schedule (destination -> origin)
+    let returnSchedule = null;
+    if (body.createReturn) {
+      const rDate = body.returnDate?.trim() || travelDate;
+      const rDep = body.returnDepartureTime?.trim() || departureTime;
+      const rArr = body.returnArrivalTime?.trim() || arrivalTime;
+
+      returnSchedule = await ScheduleModel.create({
+        busId: bus._id,
+        busName: bus.busName,
+        busNumber: bus.busNumber,
+        busType: bus.busType,
+        totalSeats: bus.totalSeats,
+        origin: destination,
+        destination: origin,
+        travelDate: rDate,
+        departureTime: rDep,
+        arrivalTime: rArr,
+        duration,
+        fare,
+        bookedSeats: [],
+      });
+    }
+
     return NextResponse.json(
       {
         bus: serializeBus(bus),
         schedule: serializeSchedule(schedule),
+        returnSchedule: returnSchedule ? serializeSchedule(returnSchedule) : null,
+        createdReturn: !!returnSchedule,
       },
       { status: 201 }
     );

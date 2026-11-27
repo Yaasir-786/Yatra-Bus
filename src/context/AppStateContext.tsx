@@ -57,10 +57,12 @@ const AppStateContext = createContext<AppStateContextValue | undefined>(undefine
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  // Start false so the page renders immediately — set to true only during active fetch
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [lastBlockedUser, setLastBlockedUser] = useState<User | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [schedulesLoading, setSchedulesLoading] = useState<boolean>(true);
+  // Start false so schedules section renders immediately with empty list
+  const [schedulesLoading, setSchedulesLoading] = useState<boolean>(false);
 
   const handleBlockedResponse = useCallback(
     (blockedUser?: User | null) => {

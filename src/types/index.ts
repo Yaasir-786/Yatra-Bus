@@ -107,6 +107,11 @@ export interface AddBusScheduleInput {
   arrivalTime: string;
   duration: string;
   fare: number;
+  // Return trip fields
+  createReturn?: boolean;
+  returnDate?: string;
+  returnDepartureTime?: string;
+  returnArrivalTime?: string;
 }
 
 export interface AdminStats {

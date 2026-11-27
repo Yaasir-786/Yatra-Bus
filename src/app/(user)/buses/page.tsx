@@ -15,7 +15,8 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react';
-import { CITIES, parseApiResponse } from '@/lib/client-api';
+import CityAutocomplete from '@/components/CityAutocomplete';
+import { parseApiResponse } from '@/lib/client-api';
 import { Bus, BusType, Schedule } from '@/types';
 
 type DepartureWindow = 'all' | 'morning' | 'afternoon' | 'night';
@@ -78,15 +79,6 @@ function BusesContent() {
 
   const busMap = useMemo(() => new Map(buses.map((b) => [b.id, b])), [buses]);
 
-  const cityOptions = useMemo(() => {
-    const set = new Set(CITIES);
-    for (const s of schedules) {
-      set.add(s.origin);
-      set.add(s.destination);
-    }
-    return Array.from(set);
-  }, [schedules]);
-
   const toggleBusType = (type: BusType) => {
     setSelectedTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
@@ -132,47 +124,27 @@ function BusesContent() {
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div>
-            <label
-              htmlFor="filter-origin"
-              className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500"
-            >
-              Origin
-            </label>
-            <select
+            <CityAutocomplete
               id="filter-origin"
+              label="Origin"
               value={originFilter}
-              onChange={(e) => setOriginFilter(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none"
-            >
-              <option value="">All Origins</option>
-              {cityOptions.map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-            </select>
+              onChange={setOriginFilter}
+              placeholder="Any origin..."
+              iconColor="text-indigo-600"
+              allowAny
+            />
           </div>
 
           <div>
-            <label
-              htmlFor="filter-destination"
-              className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500"
-            >
-              Destination
-            </label>
-            <select
+            <CityAutocomplete
               id="filter-destination"
+              label="Destination"
               value={destinationFilter}
-              onChange={(e) => setDestinationFilter(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none"
-            >
-              <option value="">All Destinations</option>
-              {cityOptions.map((city) => (
-                <option key={city} value={city}>
-                  {city}
-                </option>
-              ))}
-            </select>
+              onChange={setDestinationFilter}
+              placeholder="Any destination..."
+              iconColor="text-rose-500"
+              allowAny
+            />
           </div>
 
           <div>
@@ -356,7 +328,7 @@ function BusesContent() {
             filteredResults.map((schedule) => {
               const bus = busMap.get(schedule.busId);
               const availableSeats =
-                schedule.totalSeats - schedule.bookedSeats.length;
+                schedule.totalSeats - (schedule.bookedSeats?.length ?? 0);
               const amenities = bus?.amenities ?? [schedule.busType];
 
               return (

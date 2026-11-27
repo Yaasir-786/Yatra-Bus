@@ -1,10 +1,4 @@
-export const CITIES: string[] = [
-  'Indore',
-  'Bhopal',
-  'Mumbai',
-  'Pune',
-  'Ahmedabad',
-];
+export { INDIAN_CITIES as CITIES } from '@/data/indianCities';
 
 export interface ApiResponseError {
   error: string;

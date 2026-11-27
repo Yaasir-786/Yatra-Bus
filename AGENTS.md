@@ -23,6 +23,16 @@ A full-stack Bus Ticket Booking web application built with **Next.js (App Router
   2. **Environment Variables:** Use only `MONGODB_URI`, `GOOGLE_GENERATIVE_AI_API_KEY`, and `JWT_SECRET` from environment variables.
   3. **Persistent Auth & Live Block:** Login, register, logout, and page-refresh session restore must hit `/api/auth/login`, `/api/auth/register`, `/api/auth/logout`, and `/api/auth/me` backed by MongoDB and HTTP-only JWT cookies. Always verify latest `user.status` from MongoDB (`active` vs `blocked`).
 
+## Recent Feature & Performance Rules
+
+1. **Pan-India Cities Dataset:** Search inputs and admin route selectors must use a comprehensive Indian cities list (`src/data/indianCities.ts` with 100+ major Indian cities & autocomplete/datalist) instead of 4-5 hardcoded cities.
+2. **Auto Return-Trip Schedule:** When an admin creates a schedule (`POST /api/admin/buses` or `/api/admin/schedules`) with optional "Create Return Trip" enabled (default `true`), the backend automatically creates the reverse schedule (`destination -> origin`) with configurable return date/time/fare so admins don't enter the same route twice.
+3. **AI Model & Chat Stability:** `/api/ai/chat` must use `@ai-sdk/google` with `gemini-2.5-flash`, properly handle `messages` conversion (`convertToModelMessages` if using AI SDK v5+ or standard `messages` format matching the installed `ai` package version), and return clean error payloads instead of crashing silently.
+4. **Performance & Instant Navigation:**
+   - Enable MongoDB indexes on `Schedule` (`{ origin: 1, destination: 1, travelDate: 1 }`).
+   - Avoid blocking the entire app shell on slow client `useEffect` auth checks—render UI immediately and fetch `/api/auth/me` non-blockingly.
+   - Prefetch routes (`<Link prefetch>`) and avoid heavy redundant DB queries on every page switch.
+
 ## Directory Structure
 
 ```text

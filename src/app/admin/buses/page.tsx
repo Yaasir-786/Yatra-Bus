@@ -9,10 +9,12 @@ import {
   Clock,
   Loader2,
   Plus,
+  RefreshCw,
   Trash2,
   X,
 } from 'lucide-react';
-import { CITIES, parseApiResponse } from '@/lib/client-api';
+import CityAutocomplete from '@/components/CityAutocomplete';
+import { parseApiResponse } from '@/lib/client-api';
 import { useAppState } from '@/context/AppStateContext';
 import { BusType, Schedule } from '@/types';
 
@@ -25,7 +27,10 @@ export default function AdminBusesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Onward trip fields
   const [busName, setBusName] = useState('');
   const [busNumber, setBusNumber] = useState('');
   const [busType, setBusType] = useState<BusType>('AC');
@@ -40,6 +45,13 @@ export default function AdminBusesPage() {
   const [arrivalTime, setArrivalTime] = useState('06:00');
   const [duration, setDuration] = useState('10h 00m');
   const [fare, setFare] = useState('950');
+
+  // Return trip fields
+  const [createReturn, setCreateReturn] = useState(true);
+  const [returnDate, setReturnDate] = useState('2026-11-29');
+  const [returnDepartureTime, setReturnDepartureTime] = useState('20:00');
+  const [returnArrivalTime, setReturnArrivalTime] = useState('06:00');
+
   const [formError, setFormError] = useState<string | null>(null);
 
   const fetchAdminBuses = useCallback(async () => {
@@ -81,6 +93,10 @@ export default function AdminBusesPage() {
       setFormError('Origin and destination cities must be different.');
       return;
     }
+    if (!origin.trim() || !destination.trim()) {
+      setFormError('Please select both origin and destination cities.');
+      return;
+    }
 
     const parsedSeats = Number.parseInt(totalSeats, 10);
     const parsedFare = Number.parseInt(fare, 10);
@@ -113,6 +129,10 @@ export default function AdminBusesPage() {
       arrivalTime,
       duration,
       fare: parsedFare,
+      createReturn,
+      returnDate: createReturn ? returnDate : undefined,
+      returnDepartureTime: createReturn ? returnDepartureTime : undefined,
+      returnArrivalTime: createReturn ? returnArrivalTime : undefined,
     });
     setSaving(false);
 
@@ -145,7 +165,7 @@ export default function AdminBusesPage() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Buses & Schedules
+            Buses &amp; Schedules
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Monitor seat occupancy in MongoDB, delete schedules, or launch new
@@ -179,7 +199,7 @@ export default function AdminBusesPage() {
         <div className="grid grid-cols-1 gap-4">
           {schedules.map((schedule) => {
             const total = schedule.totalSeats;
-            const booked = schedule.bookedSeats.length;
+            const booked = schedule.bookedSeats?.length ?? 0;
             const occupancyPct = Math.min(
               Math.round((booked / Math.max(total, 1)) * 100),
               100
@@ -294,7 +314,7 @@ export default function AdminBusesPage() {
           <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-lg font-bold text-slate-900">
-                Add Bus & Schedule
+                Add Bus &amp; Schedule
               </h2>
               <button
                 type="button"
@@ -312,6 +332,7 @@ export default function AdminBusesPage() {
             )}
 
             <form onSubmit={(e) => void handleCreate(e)} className="space-y-4">
+              {/* Bus Info */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-600">
@@ -354,7 +375,6 @@ export default function AdminBusesPage() {
                     <option value="Sleeper">Sleeper</option>
                   </select>
                 </div>
-
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-600">
                     Total Seats
@@ -368,7 +388,6 @@ export default function AdminBusesPage() {
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
                   />
                 </div>
-
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-600">
                     Fare (₹)
@@ -395,89 +414,135 @@ export default function AdminBusesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">
-                    Origin
-                  </label>
-                  <select
+              {/* Onward Route */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Onward Trip
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <CityAutocomplete
+                    id="admin-origin"
+                    label="Origin"
                     value={origin}
-                    onChange={(e) => setOrigin(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
-                  >
-                    {CITIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">
-                    Destination
-                  </label>
-                  <select
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
-                  >
-                    {CITIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">
-                    Travel Date
-                  </label>
-                  <input
-                    type="date"
-                    value={travelDate}
-                    onChange={(e) => setTravelDate(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
+                    onChange={setOrigin}
+                    placeholder="Origin city..."
+                    iconColor="text-indigo-600"
                   />
+                  <CityAutocomplete
+                    id="admin-destination"
+                    label="Destination"
+                    value={destination}
+                    onChange={setDestination}
+                    placeholder="Destination city..."
+                    iconColor="text-rose-500"
+                  />
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">
+                      Travel Date
+                    </label>
+                    <input
+                      type="date"
+                      value={travelDate}
+                      onChange={(e) => setTravelDate(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">
+                      Departure
+                    </label>
+                    <input
+                      type="time"
+                      value={departureTime}
+                      onChange={(e) => setDepartureTime(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">
+                      Arrival
+                    </label>
+                    <input
+                      type="time"
+                      value={arrivalTime}
+                      onChange={(e) => setArrivalTime(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-600">
+                      Duration
+                    </label>
+                    <input
+                      type="text"
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      placeholder="e.g. 4h 15m"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">
-                    Departure Time
-                  </label>
+              {/* Return Trip Toggle */}
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
+                <label className="flex cursor-pointer items-center gap-3">
                   <input
-                    type="time"
-                    value={departureTime}
-                    onChange={(e) => setDepartureTime(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
+                    type="checkbox"
+                    checked={createReturn}
+                    onChange={(e) => setCreateReturn(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">
-                    Arrival Time
-                  </label>
-                  <input
-                    type="time"
-                    value={arrivalTime}
-                    onChange={(e) => setArrivalTime(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">
-                    Duration
-                  </label>
-                  <input
-                    type="text"
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    placeholder="e.g. 4h 15m"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none"
-                  />
-                </div>
+                  <div>
+                    <span className="text-sm font-semibold text-slate-900">
+                      Also create return trip
+                    </span>
+                    <span className="ml-2 text-xs text-slate-500">
+                      ({destination || 'Dest'} → {origin || 'Origin'})
+                    </span>
+                  </div>
+                  <RefreshCw className="ml-auto h-4 w-4 text-indigo-600" />
+                </label>
+
+                {createReturn && (
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">
+                        Return Date
+                      </label>
+                      <input
+                        type="date"
+                        value={returnDate}
+                        onChange={(e) => setReturnDate(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">
+                        Return Departure
+                      </label>
+                      <input
+                        type="time"
+                        value={returnDepartureTime}
+                        onChange={(e) => setReturnDepartureTime(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">
+                        Return Arrival
+                      </label>
+                      <input
+                        type="time"
+                        value={returnArrivalTime}
+                        onChange={(e) => setReturnArrivalTime(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
@@ -494,7 +559,11 @@ export default function AdminBusesPage() {
                   className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
                 >
                   {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {saving ? 'Saving...' : 'Save Schedule'}
+                  {saving
+                    ? 'Saving...'
+                    : createReturn
+                    ? 'Save Both Schedules'
+                    : 'Save Schedule'}
                 </button>
               </div>
             </form>

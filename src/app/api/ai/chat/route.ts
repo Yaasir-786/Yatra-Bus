@@ -46,6 +46,13 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as { messages?: UIMessage[] };
     const uiMessages = Array.isArray(body.messages) ? body.messages : [];
 
+    if (uiMessages.length === 0) {
+      return NextResponse.json(
+        { error: 'No messages provided.' },
+        { status: 400 }
+      );
+    }
+
     await connectDB();
     const currentUser = await getOptionalUser();
 
@@ -58,13 +65,16 @@ export async function POST(request: NextRequest) {
 
     const google = createGoogleGenerativeAI({ apiKey });
 
+    // Convert UIMessage[] to ModelMessage[] for streamText
+    const modelMessages = await convertToModelMessages(uiMessages);
+
     const result = streamText({
       model: google('gemini-2.5-flash'),
       system: `You are the YatraBus AI Trip Assistant for an Indian intercity bus booking platform.
 Always use your tools to inspect live MongoDB data before answering questions about buses, schedules, fares, seat availability, or user bookings.
 When recommending a schedule, always include the schedule ID and suggest clicking the booking link /book/<scheduleId>, along with fares in ₹, departure/arrival times, bus type, and available seat counts.
 Be concise, friendly, and accurate.`,
-      messages: await convertToModelMessages(uiMessages),
+      messages: modelMessages,
       stopWhen: stepCountIs(5),
       tools: {
         searchBusesTool: tool({

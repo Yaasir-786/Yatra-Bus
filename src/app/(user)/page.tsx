@@ -8,14 +8,13 @@ import {
   ArrowRight,
   Calendar,
   Loader2,
-  MapPin,
   Search,
   ShieldCheck,
   Sparkles,
   Ticket,
   Zap,
 } from 'lucide-react';
-import { CITIES } from '@/lib/client-api';
+import CityAutocomplete from '@/components/CityAutocomplete';
 import { useAppState } from '@/context/AppStateContext';
 
 export default function HomePage() {
@@ -24,15 +23,6 @@ export default function HomePage() {
   const [origin, setOrigin] = useState('Indore');
   const [destination, setDestination] = useState('Bhopal');
   const [travelDate, setTravelDate] = useState('2026-11-27');
-
-  const cityOptions = useMemo(() => {
-    const set = new Set(CITIES);
-    for (const s of schedules) {
-      set.add(s.origin);
-      set.add(s.destination);
-    }
-    return Array.from(set);
-  }, [schedules]);
 
   const popularRoutes = useMemo(() => {
     const routeMap = new Map<
@@ -51,7 +41,7 @@ export default function HomePage() {
         });
       }
     }
-    return Array.from(routeMap.values()).slice(0, 4);
+    return Array.from(routeMap.values()).slice(0, 8);
   }, [schedules]);
 
   const uniqueBusCount = useMemo(
@@ -104,29 +94,15 @@ export default function HomePage() {
             className="mt-8 rounded-2xl bg-white p-4 text-slate-900 shadow-xl sm:p-6"
           >
             <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:items-end">
-              <div className="md:col-span-3">
-                <label
-                  htmlFor="home-origin"
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500"
-                >
-                  From
-                </label>
-                <div className="relative">
-                  <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-600" />
-                  <select
-                    id="home-origin"
-                    value={origin}
-                    onChange={(e) => setOrigin(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-semibold text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none"
-                  >
-                    <option value="">All Origins</option>
-                    {cityOptions.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="md:col-span-4">
+                <CityAutocomplete
+                  id="home-origin"
+                  label="From"
+                  value={origin}
+                  onChange={setOrigin}
+                  placeholder="Origin city..."
+                  iconColor="text-indigo-600"
+                />
               </div>
 
               <div className="flex justify-center md:col-span-1">
@@ -141,32 +117,18 @@ export default function HomePage() {
                 </button>
               </div>
 
-              <div className="md:col-span-3">
-                <label
-                  htmlFor="home-destination"
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500"
-                >
-                  To
-                </label>
-                <div className="relative">
-                  <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-rose-500" />
-                  <select
-                    id="home-destination"
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-9 pr-3 text-sm font-semibold text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none"
-                  >
-                    <option value="">All Destinations</option>
-                    {cityOptions.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="md:col-span-4">
+                <CityAutocomplete
+                  id="home-destination"
+                  label="To"
+                  value={destination}
+                  onChange={setDestination}
+                  placeholder="Destination city..."
+                  iconColor="text-rose-500"
+                />
               </div>
 
-              <div className="md:col-span-3">
+              <div className="md:col-span-2">
                 <label
                   htmlFor="home-date"
                   className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500"
@@ -185,7 +147,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="md:col-span-2">
+              <div className="md:col-span-1">
                 <button
                   type="submit"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700"
@@ -218,7 +180,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Popular Routes from MongoDB */}
+      {/* Popular Routes from MongoDB — up to 8 routes, 2 rows of 4 */}
       <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-end justify-between gap-4">
           <div>
@@ -306,7 +268,7 @@ export default function HomePage() {
               <ShieldCheck className="h-5 w-5" />
             </div>
             <h3 className="mt-4 text-base font-bold text-slate-900">
-              Instant E-Tickets & Easy Cancel
+              Instant E-Tickets &amp; Easy Cancel
             </h3>
             <p className="mt-1.5 text-sm text-slate-500">
               View printable E-Tickets immediately after checkout and cancel
