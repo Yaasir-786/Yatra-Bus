@@ -27,7 +27,29 @@ export async function GET(request: NextRequest) {
       );
     }
     if (travelDate) {
-      query.travelDate = travelDate;
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+      const parsed = new Date(`${travelDate}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        const dayOfWeek = dayNames[parsed.getDay()];
+        query.$and = [
+          {
+            $or: [
+              { operatingDays: dayOfWeek },
+              { operatingDays: { $exists: false } },
+              { operatingDays: { $size: 0 } },
+            ],
+          },
+          {
+            $or: [
+              { travelDate: '' },
+              { travelDate: { $exists: false } },
+              { travelDate },
+            ],
+          },
+        ];
+      } else {
+        query.travelDate = travelDate;
+      }
     }
     if (busType && ['AC', 'Non-AC', 'Sleeper'].includes(busType)) {
       query.busType = busType;

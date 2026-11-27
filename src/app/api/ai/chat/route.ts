@@ -1,20 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 import {
   convertToModelMessages,
   stepCountIs,
   streamText,
   tool,
   UIMessage,
-} from 'ai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { z } from 'zod';
-import mongoose from 'mongoose';
-import { connectDB } from '@/lib/mongodb';
-import { getOptionalUser } from '@/lib/auth-guard';
-import ScheduleModel from '@/models/Schedule';
-import BookingModel from '@/models/Booking';
+} from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { z } from "zod";
+import mongoose from "mongoose";
+import { connectDB } from "@/lib/mongodb";
+import { getOptionalUser } from "@/lib/auth-guard";
+import ScheduleModel from "@/models/Schedule";
+import BookingModel from "@/models/Booking";
 
-const COLUMNS = ['A', 'B', 'C', 'D'] as const;
+const COLUMNS = ["A", "B", "C", "D"] as const;
 
 function buildAllSeatLabels(totalSeats: number): string[] {
   const labels: string[] = [];
@@ -37,9 +37,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'GOOGLE_GENERATIVE_AI_API_KEY is not configured in environment variables.',
+            "GOOGLE_GENERATIVE_AI_API_KEY is not configured in environment variables.",
         },
-        { status: 503 }
+        { status: 503 },
       );
     }
 
@@ -48,18 +48,18 @@ export async function POST(request: NextRequest) {
 
     if (uiMessages.length === 0) {
       return NextResponse.json(
-        { error: 'No messages provided.' },
-        { status: 400 }
+        { error: "No messages provided." },
+        { status: 400 },
       );
     }
 
     await connectDB();
     const currentUser = await getOptionalUser();
 
-    if (currentUser?.status === 'blocked') {
+    if (currentUser?.status === "blocked") {
       return NextResponse.json(
-        { error: 'Account blocked', code: 'USER_BLOCKED' },
-        { status: 403 }
+        { error: "Account blocked", code: "USER_BLOCKED" },
+        { status: 403 },
       );
     }
 
@@ -68,23 +68,37 @@ export async function POST(request: NextRequest) {
     // Convert UIMessage[] to ModelMessage[] for streamText
     const modelMessages = await convertToModelMessages(uiMessages);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort(new Error('AI request timed out after 25 seconds.'));
+    }, 25000);
+
     const result = streamText({
       model: google('gemini-2.5-flash'),
+      abortSignal: controller.signal,
       system: `You are the YatraBus AI Trip Assistant for an Indian intercity bus booking platform.
 Always use your tools to inspect live MongoDB data before answering questions about buses, schedules, fares, seat availability, or user bookings.
+After calling a tool, ALWAYS summarize the results in a clear, helpful text response for the user.
 When recommending a schedule, always include the schedule ID and suggest clicking the booking link /book/<scheduleId>, along with fares in ₹, departure/arrival times, bus type, and available seat counts.
 Be concise, friendly, and accurate.`,
       messages: modelMessages,
       stopWhen: stepCountIs(5),
+      onFinish: () => {
+        clearTimeout(timeoutId);
+      },
+      onError: ({ error }) => {
+        clearTimeout(timeoutId);
+        console.error('AI Chat streamText onError:', error);
+      },
       tools: {
         searchBusesTool: tool({
           description:
-            'Search live bus schedules in MongoDB by origin city, destination city, travelDate (YYYY-MM-DD), busType (AC, Non-AC, Sleeper), or maxFare.',
+            "Search live bus schedules in MongoDB by origin city, destination city, travelDate (YYYY-MM-DD), busType (AC, Non-AC, Sleeper), or maxFare.",
           inputSchema: z.object({
             origin: z.string().optional(),
             destination: z.string().optional(),
             travelDate: z.string().optional(),
-            busType: z.enum(['AC', 'Non-AC', 'Sleeper']).optional(),
+            busType: z.enum(["AC", "Non-AC", "Sleeper"]).optional(),
             maxFare: z.number().optional(),
           }),
           execute: async ({
@@ -96,10 +110,10 @@ Be concise, friendly, and accurate.`,
           }) => {
             const query: Record<string, unknown> = {};
             if (origin) {
-              query.origin = new RegExp(`^${origin.trim()}$`, 'i');
+              query.origin = new RegExp(`^${origin.trim()}$`, "i");
             }
             if (destination) {
-              query.destination = new RegExp(`^${destination.trim()}$`, 'i');
+              query.destination = new RegExp(`^${destination.trim()}$`, "i");
             }
             if (travelDate) {
               query.travelDate = travelDate.trim();
@@ -107,7 +121,7 @@ Be concise, friendly, and accurate.`,
             if (busType) {
               query.busType = busType;
             }
-            if (typeof maxFare === 'number' && maxFare > 0) {
+            if (typeof maxFare === "number" && maxFare > 0) {
               query.fare = { $lte: maxFare };
             }
 
@@ -132,34 +146,34 @@ Be concise, friendly, and accurate.`,
               totalSeats: s.totalSeats,
               availableSeatsCount: Math.max(
                 s.totalSeats - (s.bookedSeats?.length ?? 0),
-                0
+                0,
               ),
             }));
           },
         }),
         checkSeatAvailabilityTool: tool({
           description:
-            'Inspect live available and booked seats (including window A/D vs aisle B/C seats) for a specific scheduleId.',
+            "Inspect live available and booked seats (including window A/D vs aisle B/C seats) for a specific scheduleId.",
           inputSchema: z.object({
             scheduleId: z.string(),
           }),
           execute: async ({ scheduleId }) => {
             if (!mongoose.Types.ObjectId.isValid(scheduleId)) {
-              return { error: 'Invalid scheduleId format.' };
+              return { error: "Invalid scheduleId format." };
             }
             const schedule = await ScheduleModel.findById(scheduleId).lean();
             if (!schedule) {
-              return { error: 'Schedule not found.' };
+              return { error: "Schedule not found." };
             }
 
             const allSeats = buildAllSeatLabels(schedule.totalSeats);
             const bookedSet = new Set(schedule.bookedSeats ?? []);
             const openSeats = allSeats.filter((seat) => !bookedSet.has(seat));
             const windowSeats = openSeats.filter(
-              (seat) => seat.endsWith('A') || seat.endsWith('D')
+              (seat) => seat.endsWith("A") || seat.endsWith("D"),
             );
             const aisleSeats = openSeats.filter(
-              (seat) => seat.endsWith('B') || seat.endsWith('C')
+              (seat) => seat.endsWith("B") || seat.endsWith("C"),
             );
 
             return {
@@ -180,13 +194,14 @@ Be concise, friendly, and accurate.`,
         }),
         getMyBookingsTool: tool({
           description:
-            'Fetch the currently authenticated user bookings (upcoming confirmed and cancelled tickets) from MongoDB.',
+            "Fetch the currently authenticated user bookings (upcoming confirmed and cancelled tickets) from MongoDB.",
           inputSchema: z.object({}),
           execute: async () => {
             if (!currentUser) {
               return {
                 authenticated: false,
-                message: 'User is not logged in. Ask them to sign in at /login.',
+                message:
+                  "User is not logged in. Ask them to sign in at /login.",
               };
             }
 
@@ -216,11 +231,26 @@ Be concise, friendly, and accurate.`,
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({
+      onError: (err) => {
+        console.error('AI Chat stream error:', err);
+        if (err instanceof Error && err.message) {
+          return err.message;
+        }
+        return 'AI assistant encountered an error while generating a response.';
+      },
+    });
   } catch (error) {
-    console.error('AI Chat error:', error);
+    console.error("AI Chat error:", error);
     const message =
-      error instanceof Error ? error.message : 'AI assistant error';
-    return NextResponse.json({ error: message }, { status: 500 });
+      error instanceof Error ? error.message : "AI assistant error";
+    const status =
+      typeof error === 'object' &&
+      error !== null &&
+      'statusCode' in error &&
+      typeof (error as { statusCode?: unknown }).statusCode === 'number'
+        ? (error as { statusCode: number }).statusCode
+        : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

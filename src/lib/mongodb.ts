@@ -31,7 +31,7 @@ export async function connectDB(): Promise<typeof mongoose> {
     );
   }
 
-  // Node.js on Windows can fail SRV lookups against the default local resolver (querySrv ECONNREFUSED).
+  // Use public DNS resolvers to avoid local DNS resolution issues with MongoDB Atlas SRV records.
   if (mongoUri.startsWith('mongodb+srv://')) {
     dns.setServers(['8.8.8.8', '1.1.1.1']);
   }
@@ -40,6 +40,8 @@ export async function connectDB(): Promise<typeof mongoose> {
     cached.promise = mongoose
       .connect(mongoUri, {
         bufferCommands: false,
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000,
       })
       .then((mongooseInstance) => mongooseInstance);
   }
@@ -48,6 +50,25 @@ export async function connectDB(): Promise<typeof mongoose> {
     cached.conn = await cached.promise;
   } catch (error) {
     cached.promise = null;
+
+    const message = error instanceof Error ? error.message : String(error);
+
+    // Provide a clear, actionable error for Atlas SRV DNS resolution failures.
+    if (
+      message.includes('querySrv') ||
+      message.includes('ECONNREFUSED') ||
+      message.includes('getaddrinfo') ||
+      message.includes('Server selection failed')
+    ) {
+      throw new Error(
+        `MongoDB connection failed: ${message}. ` +
+          'If using MongoDB Atlas (mongodb+srv://), your network may be blocking ' +
+          'outbound DNS (port 53) or SRV record resolution. Try using a direct ' +
+          'connection string (mongodb://...) from your Atlas cluster connection ' +
+          'string instead, or ensure DNS lookups are allowed in your network.'
+      );
+    }
+
     throw error;
   }
 

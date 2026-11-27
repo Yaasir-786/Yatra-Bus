@@ -7,6 +7,18 @@ import ScheduleModel from '@/models/Schedule';
 import BookingModel from '@/models/Booking';
 import UserModel from '@/models/User';
 
+function getErrorStatus(error: unknown): number {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    typeof (error as { statusCode?: unknown }).statusCode === 'number'
+  ) {
+    return (error as { statusCode: number }).statusCode;
+  }
+  return 500;
+}
+
 export async function POST() {
   try {
     await requireAdmin();
@@ -89,9 +101,10 @@ export async function POST() {
 
     const google = createGoogleGenerativeAI({ apiKey });
 
-    const { text } = await generateText({
-      model: google('gemini-2.5-flash'),
-      prompt: `You are an operations analyst for YatraBus. Given the live MongoDB metrics below, provide a concise, actionable 4-bullet executive summary covering:
+    try {
+      const { text } = await generateText({
+        model: google('gemini-2.5-flash'),
+        prompt: `You are an operations analyst for YatraBus. Given the live MongoDB metrics below, provide a concise, actionable 4-bullet executive summary covering:
 1. Top performing / highest occupancy routes and capacity recommendations
 2. Revenue & cancellation rate observations
 3. User risk / high-cancellation monitoring
@@ -101,12 +114,27 @@ Keep it crisp and data-backed using ₹ for currency.
 
 Live MongoDB Data:
 ${JSON.stringify(summarySnapshot, null, 2)}`,
-    });
+      });
 
-    return NextResponse.json({
-      insights: text,
-      metrics: summarySnapshot,
-    });
+      return NextResponse.json({
+        insights: text,
+        metrics: summarySnapshot,
+      });
+    } catch (aiError) {
+      console.error('AI Admin Insights error:', aiError);
+      const message =
+        aiError instanceof Error
+          ? aiError.message
+          : 'Failed to generate AI operational insights.';
+      const status = getErrorStatus(aiError);
+      return NextResponse.json(
+        {
+          error: message,
+          metrics: summarySnapshot,
+        },
+        { status }
+      );
+    }
   } catch (error) {
     return handleApiError(error);
   }

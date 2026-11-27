@@ -6,6 +6,8 @@ import {
 } from '@/lib/auth-guard';
 import { serializeUser } from '@/lib/serializers';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const user = await getOptionalUser();

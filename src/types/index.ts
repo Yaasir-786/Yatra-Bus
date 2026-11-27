@@ -13,6 +13,17 @@ export interface User {
 }
 
 export type BusType = 'AC' | 'Non-AC' | 'Sleeper';
+export type DayOfWeek = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
+
+export const DAYS_OF_WEEK: DayOfWeek[] = [
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+  'Sun',
+];
 
 export interface Bus {
   id: string;
@@ -31,13 +42,14 @@ export interface Schedule {
   busType: BusType;
   origin: string;
   destination: string;
-  travelDate: string;
+  travelDate?: string;
   departureTime: string;
   arrivalTime: string;
   duration: string;
   fare: number;
   totalSeats: number;
   bookedSeats: string[];
+  operatingDays: DayOfWeek[];
 }
 
 export type PassengerGender = 'Male' | 'Female' | 'Other';
@@ -62,7 +74,7 @@ export interface Booking {
   busNumber: string;
   origin: string;
   destination: string;
-  travelDate: string;
+  travelDate?: string;
   departureTime: string;
   arrivalTime?: string;
   passengers: Passenger[];
@@ -102,11 +114,12 @@ export interface AddBusScheduleInput {
   amenities: string[];
   origin: string;
   destination: string;
-  travelDate: string;
+  travelDate?: string;
   departureTime: string;
   arrivalTime: string;
   duration: string;
   fare: number;
+  operatingDays?: DayOfWeek[];
   // Return trip fields
   createReturn?: boolean;
   returnDate?: string;

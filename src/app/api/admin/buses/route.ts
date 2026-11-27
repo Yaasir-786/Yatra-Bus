@@ -4,7 +4,32 @@ import { handleApiError, requireAdmin } from '@/lib/auth-guard';
 import BusModel from '@/models/Bus';
 import ScheduleModel from '@/models/Schedule';
 import { serializeBus, serializeSchedule } from '@/lib/serializers';
-import { BusType } from '@/types';
+import { BusType, DAYS_OF_WEEK, DayOfWeek } from '@/types';
+
+function calculateTripDuration(
+  departureTime: string,
+  arrivalTime: string
+): string {
+  const [depH, depM] = departureTime.split(':').map(Number);
+  const [arrH, arrM] = arrivalTime.split(':').map(Number);
+  if (
+    Number.isNaN(depH) ||
+    Number.isNaN(depM) ||
+    Number.isNaN(arrH) ||
+    Number.isNaN(arrM)
+  ) {
+    return '4h 00m';
+  }
+  const startMins = depH * 60 + depM;
+  let endMins = arrH * 60 + arrM;
+  if (endMins <= startMins) {
+    endMins += 24 * 60;
+  }
+  const diff = endMins - startMins;
+  const hours = Math.floor(diff / 60);
+  const mins = diff % 60;
+  return `${hours}h ${String(mins).padStart(2, '0')}m`;
+}
 
 export async function GET() {
   try {
@@ -41,7 +66,7 @@ export async function POST(request: NextRequest) {
       arrivalTime?: string;
       duration?: string;
       fare?: number;
-      // Return trip
+      operatingDays?: string[];
       createReturn?: boolean;
       returnDate?: string;
       returnDepartureTime?: string;
@@ -58,15 +83,24 @@ export async function POST(request: NextRequest) {
     const travelDate = body.travelDate?.trim() ?? '';
     const departureTime = body.departureTime?.trim() ?? '';
     const arrivalTime = body.arrivalTime?.trim() ?? '';
-    const duration = body.duration?.trim() || '4h 00m';
+    const duration =
+      body.duration?.trim() ||
+      calculateTripDuration(departureTime, arrivalTime);
     const fare = Number(body.fare ?? 0);
+
+    const parsedDays = Array.isArray(body.operatingDays)
+      ? body.operatingDays.filter((d): d is DayOfWeek =>
+          (DAYS_OF_WEEK as readonly string[]).includes(d)
+        )
+      : [];
+    const operatingDays: DayOfWeek[] =
+      parsedDays.length > 0 ? parsedDays : [...DAYS_OF_WEEK];
 
     if (
       !busName ||
       !busNumber ||
       !origin ||
       !destination ||
-      !travelDate ||
       !departureTime ||
       !arrivalTime ||
       fare < 1
@@ -79,7 +113,6 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    // Upsert bus
     let bus = await BusModel.findOne({ busNumber });
     if (!bus) {
       bus = await BusModel.create({
@@ -91,7 +124,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create onward schedule
     const schedule = await ScheduleModel.create({
       busId: bus._id,
       busName: bus.busName,
@@ -106,14 +138,15 @@ export async function POST(request: NextRequest) {
       duration,
       fare,
       bookedSeats: [],
+      operatingDays,
     });
 
-    // Optionally create return schedule (destination -> origin)
     let returnSchedule = null;
     if (body.createReturn) {
-      const rDate = body.returnDate?.trim() || travelDate;
+      const rDate = body.returnDate?.trim() ?? '';
       const rDep = body.returnDepartureTime?.trim() || departureTime;
       const rArr = body.returnArrivalTime?.trim() || arrivalTime;
+      const rDuration = calculateTripDuration(rDep, rArr);
 
       returnSchedule = await ScheduleModel.create({
         busId: bus._id,
@@ -126,9 +159,10 @@ export async function POST(request: NextRequest) {
         travelDate: rDate,
         departureTime: rDep,
         arrivalTime: rArr,
-        duration,
+        duration: rDuration,
         fare,
         bookedSeats: [],
+        operatingDays,
       });
     }
 

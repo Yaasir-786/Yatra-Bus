@@ -1,4 +1,4 @@
-import { Booking, Bus, Schedule, User } from '@/types';
+import { Booking, Bus, DAYS_OF_WEEK, DayOfWeek, Schedule, User } from '@/types';
 
 export function serializeUser(
   doc: {
@@ -52,14 +52,18 @@ export function serializeSchedule(doc: {
   busType: 'AC' | 'Non-AC' | 'Sleeper';
   origin: string;
   destination: string;
-  travelDate: string;
+  travelDate?: string;
   departureTime: string;
   arrivalTime: string;
   duration?: string;
   fare: number;
   totalSeats: number;
   bookedSeats?: string[];
+  operatingDays?: string[];
 }): Schedule {
+  const validDays = (doc.operatingDays ?? []).filter((d): d is DayOfWeek =>
+    (DAYS_OF_WEEK as readonly string[]).includes(d)
+  );
   return {
     id: doc._id.toString(),
     busId: doc.busId.toString(),
@@ -68,13 +72,14 @@ export function serializeSchedule(doc: {
     busType: doc.busType,
     origin: doc.origin,
     destination: doc.destination,
-    travelDate: doc.travelDate,
+    travelDate: doc.travelDate ?? '',
     departureTime: doc.departureTime,
     arrivalTime: doc.arrivalTime,
     duration: doc.duration ?? '4h 00m',
     fare: doc.fare,
     totalSeats: doc.totalSeats,
     bookedSeats: doc.bookedSeats ?? [],
+    operatingDays: validDays.length > 0 ? validDays : [...DAYS_OF_WEEK],
   };
 }
 

@@ -91,7 +91,8 @@ export async function POST(request: NextRequest) {
       busNumber: updatedSchedule.busNumber,
       origin: updatedSchedule.origin,
       destination: updatedSchedule.destination,
-      travelDate: updatedSchedule.travelDate,
+      travelDate:
+        updatedSchedule.travelDate || new Date().toISOString().slice(0, 10),
       departureTime: updatedSchedule.departureTime,
       arrivalTime: updatedSchedule.arrivalTime,
       passengers: passengers.map((p) => ({

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -16,7 +16,35 @@ import {
 import CityAutocomplete from '@/components/CityAutocomplete';
 import { parseApiResponse } from '@/lib/client-api';
 import { useAppState } from '@/context/AppStateContext';
-import { BusType, Schedule } from '@/types';
+import { BusType, DAYS_OF_WEEK, DayOfWeek, Schedule } from '@/types';
+
+const WEEKDAYS: DayOfWeek[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const WEEKENDS: DayOfWeek[] = ['Sat', 'Sun'];
+
+function calculateTripDuration(
+  departureTime: string,
+  arrivalTime: string
+): string {
+  const [depH, depM] = departureTime.split(':').map(Number);
+  const [arrH, arrM] = arrivalTime.split(':').map(Number);
+  if (
+    Number.isNaN(depH) ||
+    Number.isNaN(depM) ||
+    Number.isNaN(arrH) ||
+    Number.isNaN(arrM)
+  ) {
+    return '4h 00m';
+  }
+  const startMins = depH * 60 + depM;
+  let endMins = arrH * 60 + arrM;
+  if (endMins <= startMins) {
+    endMins += 24 * 60;
+  }
+  const diff = endMins - startMins;
+  const hours = Math.floor(diff / 60);
+  const mins = diff % 60;
+  return `${hours}h ${String(mins).padStart(2, '0')}m`;
+}
 
 export default function AdminBusesPage() {
   const { addBusAndSchedule, deleteSchedule } = useAppState();
@@ -40,19 +68,35 @@ export default function AdminBusesPage() {
   );
   const [origin, setOrigin] = useState('Indore');
   const [destination, setDestination] = useState('Pune');
-  const [travelDate, setTravelDate] = useState('2026-11-28');
   const [departureTime, setDepartureTime] = useState('20:00');
   const [arrivalTime, setArrivalTime] = useState('06:00');
-  const [duration, setDuration] = useState('10h 00m');
   const [fare, setFare] = useState('950');
+  const [operatingDays, setOperatingDays] = useState<DayOfWeek[]>([
+    ...DAYS_OF_WEEK,
+  ]);
 
   // Return trip fields
   const [createReturn, setCreateReturn] = useState(true);
-  const [returnDate, setReturnDate] = useState('2026-11-29');
   const [returnDepartureTime, setReturnDepartureTime] = useState('20:00');
   const [returnArrivalTime, setReturnArrivalTime] = useState('06:00');
 
   const [formError, setFormError] = useState<string | null>(null);
+
+  const autoDuration = useMemo(
+    () => calculateTripDuration(departureTime, arrivalTime),
+    [departureTime, arrivalTime]
+  );
+
+  const returnAutoDuration = useMemo(
+    () => calculateTripDuration(returnDepartureTime, returnArrivalTime),
+    [returnDepartureTime, returnArrivalTime]
+  );
+
+  const toggleDay = (day: DayOfWeek) => {
+    setOperatingDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
 
   const fetchAdminBuses = useCallback(async () => {
     setLoading(true);
@@ -97,6 +141,10 @@ export default function AdminBusesPage() {
       setFormError('Please select both origin and destination cities.');
       return;
     }
+    if (operatingDays.length === 0) {
+      setFormError('Please select at least one operating day.');
+      return;
+    }
 
     const parsedSeats = Number.parseInt(totalSeats, 10);
     const parsedFare = Number.parseInt(fare, 10);
@@ -124,13 +172,12 @@ export default function AdminBusesPage() {
       amenities: amenities.length > 0 ? amenities : [busType],
       origin,
       destination,
-      travelDate,
       departureTime,
       arrivalTime,
-      duration,
+      duration: autoDuration,
       fare: parsedFare,
+      operatingDays,
       createReturn,
-      returnDate: createReturn ? returnDate : undefined,
       returnDepartureTime: createReturn ? returnDepartureTime : undefined,
       returnArrivalTime: createReturn ? returnArrivalTime : undefined,
     });
@@ -205,6 +252,10 @@ export default function AdminBusesPage() {
               100
             );
             const isDeleting = deletingId === schedule.id;
+            const days =
+              schedule.operatingDays && schedule.operatingDays.length > 0
+                ? schedule.operatingDays
+                : DAYS_OF_WEEK;
 
             return (
               <div
@@ -234,15 +285,37 @@ export default function AdminBusesPage() {
                         <ArrowRight className="h-3.5 w-3.5 text-indigo-600" />
                         {schedule.destination}
                       </span>
-                      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        {schedule.travelDate}
-                      </span>
+                      {schedule.travelDate && (
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                          <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                          {schedule.travelDate}
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                         <Clock className="h-3.5 w-3.5 text-slate-400" />
                         {schedule.departureTime} → {schedule.arrivalTime} (
                         {schedule.duration})
                       </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                      <span className="mr-1 text-[11px] font-semibold text-slate-400">
+                        Runs:
+                      </span>
+                      {days.length === 7 ? (
+                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                          Everyday
+                        </span>
+                      ) : (
+                        days.map((d) => (
+                          <span
+                            key={d}
+                            className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700"
+                          >
+                            {d}
+                          </span>
+                        ))
+                      )}
                     </div>
                   </div>
 
@@ -311,7 +384,7 @@ export default function AdminBusesPage() {
       {/* Add Bus / Schedule Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-lg font-bold text-slate-900">
                 Add Bus &amp; Schedule
@@ -414,6 +487,57 @@ export default function AdminBusesPage() {
                 />
               </div>
 
+              {/* Operating Days Selector */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Operating Days
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setOperatingDays([...DAYS_OF_WEEK])}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                    >
+                      Everyday
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOperatingDays([...WEEKDAYS])}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                    >
+                      Weekdays
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOperatingDays([...WEEKENDS])}
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                    >
+                      Weekends
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-1.5">
+                  {DAYS_OF_WEEK.map((day) => {
+                    const selected = operatingDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleDay(day)}
+                        className={`rounded-lg py-2 text-xs font-semibold transition-colors ${
+                          selected
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Onward Route */}
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
                 <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -437,21 +561,10 @@ export default function AdminBusesPage() {
                     iconColor="text-rose-500"
                   />
                 </div>
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-600">
-                      Travel Date
-                    </label>
-                    <input
-                      type="date"
-                      value={travelDate}
-                      onChange={(e) => setTravelDate(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-600">
-                      Departure
+                      Departure Time
                     </label>
                     <input
                       type="time"
@@ -462,7 +575,7 @@ export default function AdminBusesPage() {
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-600">
-                      Arrival
+                      Arrival Time
                     </label>
                     <input
                       type="time"
@@ -475,13 +588,10 @@ export default function AdminBusesPage() {
                     <label className="mb-1 block text-xs font-semibold text-slate-600">
                       Duration
                     </label>
-                    <input
-                      type="text"
-                      value={duration}
-                      onChange={(e) => setDuration(e.target.value)}
-                      placeholder="e.g. 4h 15m"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                    />
+                    <div className="flex h-[38px] items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 text-sm font-bold text-indigo-700">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      <span>{autoDuration}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -510,17 +620,6 @@ export default function AdminBusesPage() {
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-slate-600">
-                        Return Date
-                      </label>
-                      <input
-                        type="date"
-                        value={returnDate}
-                        onChange={(e) => setReturnDate(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-600">
                         Return Departure
                       </label>
                       <input
@@ -540,6 +639,15 @@ export default function AdminBusesPage() {
                         onChange={(e) => setReturnArrivalTime(e.target.value)}
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
                       />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">
+                        Duration
+                      </label>
+                      <div className="flex h-[38px] items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 text-sm font-bold text-indigo-700">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span>{returnAutoDuration}</span>
+                      </div>
                     </div>
                   </div>
                 )}

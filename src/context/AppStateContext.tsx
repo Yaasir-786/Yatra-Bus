@@ -57,12 +57,10 @@ const AppStateContext = createContext<AppStateContextValue | undefined>(undefine
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  // Start false so the page renders immediately — set to true only during active fetch
-  const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [lastBlockedUser, setLastBlockedUser] = useState<User | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  // Start false so schedules section renders immediately with empty list
-  const [schedulesLoading, setSchedulesLoading] = useState<boolean>(false);
+  const [schedulesLoading, setSchedulesLoading] = useState<boolean>(true);
 
   const handleBlockedResponse = useCallback(
     (blockedUser?: User | null) => {
@@ -77,15 +75,24 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = useCallback(async (): Promise<User | null> => {
     setAuthLoading(true);
-    try {
+    const attemptFetch = async () => {
       const res = await fetch('/api/auth/me', {
         method: 'GET',
         credentials: 'include',
         cache: 'no-store',
       });
-      const { ok, status, data } = await parseApiResponse<{ user: User | null }>(
-        res
-      );
+      const parsed = await parseApiResponse<{ user: User | null }>(res);
+      return parsed;
+    };
+
+    try {
+      let { ok, status, data } = await attemptFetch();
+
+      // Retry once on transient 5xx (e.g. cold MongoDB connection)
+      if (!ok && status >= 500) {
+        await new Promise((r) => setTimeout(r, 300));
+        ({ ok, status, data } = await attemptFetch());
+      }
 
       if (status === 403 && data.code === 'USER_BLOCKED') {
         handleBlockedResponse(data.user ?? null);
@@ -101,6 +108,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(null);
       return null;
     } catch {
+      try {
+        await new Promise((r) => setTimeout(r, 300));
+        const { ok, status, data } = await attemptFetch();
+        if (status === 403 && data.code === 'USER_BLOCKED') {
+          handleBlockedResponse(data.user ?? null);
+          return null;
+        }
+        if (ok && data.user) {
+          setCurrentUser(data.user);
+          setLastBlockedUser(null);
+          return data.user;
+        }
+      } catch {
+        // Ignore retry error
+      }
       setCurrentUser(null);
       return null;
     } finally {

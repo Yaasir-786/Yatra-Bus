@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import Link from 'next/link';
+import React, { useState } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   Bus,
@@ -15,13 +15,13 @@ import {
   Shield,
   UserCheck,
   UserX,
-} from 'lucide-react';
-import { useAppState } from '@/context/AppStateContext';
+} from "lucide-react";
+import { useAppState } from "@/context/AppStateContext";
 
 export default function LoginPage() {
   const { loginUser, refreshSchedules } = useAppState();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -33,7 +33,7 @@ export default function LoginPage() {
     setError(null);
 
     if (!email.trim() || !password) {
-      setError('Please enter both your email address and password.');
+      setError("Please enter both your email address and password.");
       return;
     }
 
@@ -41,8 +41,8 @@ export default function LoginPage() {
     const result = await loginUser(email, password);
     setSubmitting(false);
 
-    if (!result.success && result.redirectTo !== '/blocked') {
-      setError(result.error ?? 'Invalid email or password.');
+    if (!result.success && result.redirectTo !== "/blocked") {
+      setError(result.error ?? "Invalid email or password.");
     }
   };
 
@@ -57,16 +57,16 @@ export default function LoginPage() {
     setSeedMessage(null);
     setError(null);
     try {
-      const res = await fetch('/api/seed', { method: 'POST' });
+      const res = await fetch("/api/seed", { method: "POST" });
       const data = (await res.json()) as { message?: string; error?: string };
       if (!res.ok) {
-        setError(data.error ?? 'Failed to seed database.');
+        setError(data.error ?? "Failed to seed database.");
       } else {
-        setSeedMessage(data.message ?? 'Database seeded successfully.');
+        setSeedMessage(data.message ?? "Database seeded successfully.");
         await refreshSchedules();
       }
     } catch {
-      setError('Could not connect to /api/seed.');
+      setError("Could not connect to /api/seed.");
     } finally {
       setSeeding(false);
     }
@@ -105,8 +105,7 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="login-email"
-              className="mb-1.5 block text-xs font-semibold text-slate-700"
-            >
+              className="mb-1.5 block text-xs font-semibold text-slate-700">
               Email Address
             </label>
             <div className="relative">
@@ -125,15 +124,14 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="login-password"
-              className="mb-1.5 block text-xs font-semibold text-slate-700"
-            >
+              className="mb-1.5 block text-xs font-semibold text-slate-700">
               Password
             </label>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 id="login-password"
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
@@ -143,8 +141,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
+                aria-label={showPassword ? "Hide password" : "Show password"}>
                 {showPassword ? (
                   <EyeOff className="h-4 w-4" />
                 ) : (
@@ -157,66 +154,17 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60"
-          >
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60">
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {submitting ? 'Signing In...' : 'Sign In'}
+            {submitting ? "Signing In..." : "Sign In"}
           </button>
         </form>
 
-        {/* Quick-fill Seeded Demo Credential Buttons */}
-        <div className="mt-6 border-t border-slate-100 pt-5">
-          <p className="mb-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Quick-Fill Seeded Demo Credentials
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => fillCredentials('user@bus.com', 'user123')}
-              className="flex flex-col items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50/70 px-2 py-2.5 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
-            >
-              <UserCheck className="h-4 w-4 text-emerald-600" />
-              <span>Active User</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillCredentials('blocked@bus.com', 'blocked123')}
-              className="flex flex-col items-center gap-1 rounded-xl border border-rose-200 bg-rose-50/70 px-2 py-2.5 text-[11px] font-semibold text-rose-800 transition-colors hover:bg-rose-100"
-            >
-              <UserX className="h-4 w-4 text-rose-600" />
-              <span>Blocked User</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillCredentials('admin@bus.com', 'admin123')}
-              className="flex flex-col items-center gap-1 rounded-xl border border-purple-200 bg-purple-50/70 px-2 py-2.5 text-[11px] font-semibold text-purple-800 transition-colors hover:bg-purple-100"
-            >
-              <Shield className="h-4 w-4 text-purple-600" />
-              <span>Admin</span>
-            </button>
-          </div>
-
-          <button
-            type="button"
-            disabled={seeding}
-            onClick={() => void handleSeedDatabase()}
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-60"
-          >
-            {seeding ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Database className="h-3.5 w-3.5 text-indigo-600" />
-            )}
-            {seeding ? 'Seeding MongoDB...' : 'Seed Demo Data in MongoDB'}
-          </button>
-        </div>
-
         <p className="mt-6 text-center text-sm text-slate-600">
-          Don&apos;t have an account?{' '}
+          Don&apos;t have an account?{" "}
           <Link
             href="/register"
-            className="font-semibold text-indigo-600 hover:text-indigo-700"
-          >
+            className="font-semibold text-indigo-600 hover:text-indigo-700">
             Create an account
           </Link>
         </p>

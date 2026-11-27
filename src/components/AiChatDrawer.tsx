@@ -4,7 +4,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, UIMessage } from 'ai';
-import { AlertCircle, Bot, Loader2, Send, Sparkles, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Bot,
+  Loader2,
+  Send,
+  Sparkles,
+  Square,
+  X,
+} from 'lucide-react';
 
 function extractTextFromMessage(message: UIMessage): string {
   return message.parts
@@ -18,20 +26,86 @@ function extractBookPaths(text: string): string[] {
   return Array.from(new Set(matches));
 }
 
+function formatAiError(error: Error | string): string {
+  const raw = (typeof error === 'string' ? error : error.message)?.trim();
+  if (!raw) {
+    return 'Could not reach AI Trip Assistant. Check GOOGLE_GENERATIVE_AI_API_KEY in .env.local.';
+  }
+  try {
+    const parsed = JSON.parse(raw) as { error?: string; message?: string };
+    if (parsed.error) return parsed.error;
+    if (parsed.message) return parsed.message;
+  } catch {
+    // Not JSON; return raw message
+  }
+  return raw;
+}
+
 export default function AiChatDrawer() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [localLoading, setLocalLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: '/api/ai/chat',
         credentials: 'include',
+        fetch: async (url, init) => {
+          const timeoutController = new AbortController();
+          const timer = setTimeout(() => {
+            timeoutController.abort();
+          }, 30000);
+
+          const parentSignal = init?.signal;
+          const onParentAbort = () => timeoutController.abort();
+          if (parentSignal) {
+            if (parentSignal.aborted) {
+              clearTimeout(timer);
+              timeoutController.abort();
+            } else {
+              parentSignal.addEventListener('abort', onParentAbort, { once: true });
+            }
+          }
+
+          try {
+            const response = await fetch(url, {
+              ...init,
+              signal: timeoutController.signal,
+            });
+            if (!response.ok) {
+              let errText = `AI request failed (${response.status})`;
+              try {
+                const body = (await response.json()) as { error?: string };
+                if (body.error) errText = body.error;
+              } catch {
+                // Non-JSON error
+              }
+              throw new Error(errText);
+            }
+            return response;
+          } catch (err) {
+            if (
+              err instanceof DOMException &&
+              err.name === 'AbortError' &&
+              !parentSignal?.aborted
+            ) {
+              throw new Error(
+                'AI request timed out after 30 seconds. Please check your connection or API key.'
+              );
+            }
+            throw err;
+          } finally {
+            clearTimeout(timer);
+            parentSignal?.removeEventListener('abort', onParentAbort);
+          }
+        },
       }),
     []
   );
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, stop } = useChat({
     transport,
   });
 
@@ -41,14 +115,42 @@ export default function AiChatDrawer() {
     return () => window.removeEventListener('open-ai-assistant', handleOpen);
   }, []);
 
-  const isStreaming = status === 'submitted' || status === 'streaming';
+  const isStreaming =
+    localLoading || status === 'submitted' || status === 'streaming';
+
+  // Safety guard: never allow streaming indicator to hang indefinitely
+  useEffect(() => {
+    if (!isStreaming) return;
+    const safetyTimer = setTimeout(() => {
+      stop();
+      setLocalLoading(false);
+      setLocalError(
+        'AI assistant took too long to respond. Please try again.'
+      );
+    }, 32000);
+    return () => clearTimeout(safetyTimer);
+  }, [isStreaming, stop]);
 
   const handleSend = async (promptText?: string) => {
     const query = (promptText ?? input).trim();
     if (!query || isStreaming) return;
     if (!promptText) setInput('');
-    await sendMessage({ text: query });
+    setLocalError(null);
+    setLocalLoading(true);
+    try {
+      await sendMessage({ text: query });
+    } catch (err) {
+      setLocalError(
+        err instanceof Error
+          ? formatAiError(err)
+          : 'Failed to reach AI Trip Assistant.'
+      );
+    } finally {
+      setLocalLoading(false);
+    }
   };
+
+  const displayError = localError ?? (error ? formatAiError(error) : null);
 
   const quickPrompts = [
     'Find buses from Indore to Bhopal',
@@ -145,19 +247,29 @@ export default function AiChatDrawer() {
             })}
 
             {isStreaming && (
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
-                <span>Checking live schedules...</span>
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                  <span>Checking live schedules...</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    stop();
+                    setLocalLoading(false);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+                >
+                  <Square className="h-2.5 w-2.5 fill-current" />
+                  Stop
+                </button>
               </div>
             )}
 
-            {error && (
+            {displayError && (
               <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>
-                  {error.message ||
-                    'Could not reach AI Trip Assistant. Check GOOGLE_GENERATIVE_AI_API_KEY in .env.local.'}
-                </span>
+                <span>{displayError}</span>
               </div>
             )}
           </div>
